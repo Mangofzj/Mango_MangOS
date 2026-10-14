@@ -27,7 +27,7 @@ OpenSBI Domain
 
 ### TimerOS
 
-仓库：<https://gitee.com/yang_lian/quard-star>
+仓库：<https://github.com/Mangofzj/Mango_QuardStar>
 
 项目目录：`/home/mango/embedded/plct/timeros/timer-os`
 
