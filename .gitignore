@@ -1,6 +1,6 @@
 # Build output
-build/
-output/
+/build/
+/output/
 
 # Editor/IDE
 .vscode/
@@ -8,6 +8,9 @@ output/
 *.swp
 *.swo
 *~
+
+# Claude Code
+.claude/
 
 # Python
 __pycache__/
