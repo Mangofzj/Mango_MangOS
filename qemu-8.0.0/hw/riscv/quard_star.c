@@ -6,16 +6,23 @@
  */
 
 #include "qemu/osdep.h"
+#include "qemu/units.h"
 #include "qemu/error-report.h"
 #include "qapi/error.h"
 #include "hw/boards.h"
 #include "hw/loader.h"
 #include "hw/qdev-properties.h"
+#include "hw/char/serial.h"
 #include "target/riscv/cpu.h"
 #include "hw/riscv/riscv_hart.h"
 #include "hw/riscv/quard_star.h"
 #include "hw/riscv/boot.h"
 #include "hw/riscv/numa.h"
+#include "hw/intc/riscv_aclint.h"
+#include "hw/intc/sifive_plic.h"
+#include "sysemu/sysemu.h"
+
+#define QUARD_STAR_FLASH_SECTOR_SIZE (256 * KiB)
 
 /* 内存地址映射 */
 static const MemMapEntry quard_star_memmap[] = {
@@ -90,6 +97,60 @@ static void quard_star_cpu_create(MachineState *machine)
     }
 }
 
+/* 创建并映射 pflash 设备 */
+static void quard_star_flash_create(MachineState *machine)
+{
+    QuardStarState *s = QUARD_STAR_MACHINE(machine);
+    MemoryRegion *system_memory = get_system_memory();
+    DeviceState *dev = qdev_new(TYPE_PFLASH_CFI01);
+    hwaddr flashbase = quard_star_memmap[QUARD_STAR_FLASH].base;
+    hwaddr flashsize = quard_star_memmap[QUARD_STAR_FLASH].size;
+
+    /* 设置 pflash 芯片属性 */
+    qdev_prop_set_uint64(dev, "sector-length",
+                         QUARD_STAR_FLASH_SECTOR_SIZE);
+    qdev_prop_set_uint8(dev, "width", 4);
+    qdev_prop_set_uint8(dev, "device-width", 2);
+    qdev_prop_set_bit(dev, "big-endian", false);
+
+    /* 设置 pflash 芯片 ID 与设备名 */
+    qdev_prop_set_uint16(dev, "id0", 0x89);
+    qdev_prop_set_uint16(dev, "id1", 0x18);
+    qdev_prop_set_uint16(dev, "id2", 0x00);
+    qdev_prop_set_uint16(dev, "id3", 0x00);
+    qdev_prop_set_string(dev, "name", "quard-star.flash0");
+
+    /* 将 pflash 注册为 Machine 的子设备 */
+    object_property_add_child(OBJECT(s),
+                              "quard-star.flash0", OBJECT(dev));
+
+    /* 为 pflash 的 drive 属性创建别名 */
+    object_property_add_alias(OBJECT(s), "pflash0",
+                              OBJECT(dev), "drive");
+
+    /* 保存 pflash 设备指针并绑定固件镜像后端 */
+    s->flash = PFLASH_CFI01(dev);
+    pflash_cfi01_legacy_drive(s->flash,
+                              drive_get(IF_PFLASH, 0, 0));
+
+    /* 校验 pflash 容量并设置扇区数量 */
+    assert(QEMU_IS_ALIGNED(flashsize,
+                           QUARD_STAR_FLASH_SECTOR_SIZE));
+    assert(flashsize / QUARD_STAR_FLASH_SECTOR_SIZE <= UINT32_MAX);
+
+    qdev_prop_set_uint32(dev, "num-blocks",
+                         flashsize / QUARD_STAR_FLASH_SECTOR_SIZE);
+
+    /* 完成 pflash 设备初始化 */
+    sysbus_realize_and_unref(SYS_BUS_DEVICE(dev), &error_fatal);
+
+    /* 将 pflash 映射到系统物理地址空间 */
+    memory_region_add_subregion(
+        system_memory,
+        flashbase,
+        sysbus_mmio_get_region(SYS_BUS_DEVICE(dev), 0));
+}
+
 /* 创建 MROM、SRAM、DRAM 并设置复位向量 */
 static void quard_star_memory_create(MachineState *machine)
 {
@@ -139,15 +200,153 @@ static void quard_star_memory_create(MachineState *machine)
         quard_star_memmap[QUARD_STAR_MROM].base,
         mask_rom);
 
-    /* 将复位向量写入 MROM，复位后从 MROM 起始地址执行 */
+    /* 将复位向量写入 MROM，目标为 pflash */
     riscv_setup_rom_reset_vec(
         machine,
         &s->soc[0],
-        quard_star_memmap[QUARD_STAR_MROM].base,
+        quard_star_memmap[QUARD_STAR_FLASH].base,
         quard_star_memmap[QUARD_STAR_MROM].base,
         quard_star_memmap[QUARD_STAR_MROM].size,
         0x0,
         0x0);
+}
+
+/* 创建 PLIC 外部中断控制器 */
+static void quard_star_plic_create(MachineState *machine)
+{
+    QuardStarState *s = QUARD_STAR_MACHINE(machine);
+    int socket_count = riscv_socket_count(machine);
+    int i, hart_count, base_hartid;
+    char *plic_hart_config;
+
+    /* 按 Socket 创建 PLIC */
+    for (i = 0; i < socket_count; i++) {
+
+        /* 获取当前 Socket 的 Hart 数量和起始 Hart ID */
+        hart_count = riscv_socket_hart_count(machine, i);
+        base_hartid = riscv_socket_first_hartid(machine, i);
+
+        /* 生成 Hart 对应的 M/S 模式中断上下文配置 */
+        plic_hart_config =
+            riscv_plic_hart_config_string(hart_count);
+
+        s->plic[i] = sifive_plic_create(
+            quard_star_memmap[QUARD_STAR_PLIC].base +
+                i * quard_star_memmap[QUARD_STAR_PLIC].size,
+            plic_hart_config,
+            hart_count,
+            base_hartid,
+            QUARD_STAR_PLIC_NUM_SOURCES,
+            QUARD_STAR_PLIC_NUM_PRIORITIES,
+            QUARD_STAR_PLIC_PRIORITY_BASE,
+            QUARD_STAR_PLIC_PENDING_BASE,
+            QUARD_STAR_PLIC_ENABLE_BASE,
+            QUARD_STAR_PLIC_ENABLE_STRIDE,
+            QUARD_STAR_PLIC_CONTEXT_BASE,
+            QUARD_STAR_PLIC_CONTEXT_STRIDE,
+            quard_star_memmap[QUARD_STAR_PLIC].size);
+
+        g_free(plic_hart_config);
+    }
+}
+
+/* 创建 ACLINT 软件中断控制器和机器模式定时器 */
+static void quard_star_aclint_create(MachineState *machine)
+{
+    int socket_count = riscv_socket_count(machine);
+    int i, base_hartid, hart_count;
+    hwaddr aclint_base;
+
+    /* 按 Socket 创建 ACLINT：机器模式软件中断控制器和定时器 */
+    for (i = 0; i < socket_count; i++) {
+
+        /* 获取当前 Socket 对应的 Hart ID 范围 */
+        base_hartid = riscv_socket_first_hartid(machine, i);
+        hart_count = riscv_socket_hart_count(machine, i);
+
+        /* 计算当前 Socket 的 ACLINT 地址 */
+        aclint_base = quard_star_memmap[QUARD_STAR_ACLINT].base +
+                      i * quard_star_memmap[QUARD_STAR_ACLINT].size;
+
+        riscv_aclint_swi_create(
+            aclint_base,
+            base_hartid,
+            hart_count,
+            false);
+
+        riscv_aclint_mtimer_create(
+            aclint_base + RISCV_ACLINT_SWI_SIZE,
+            RISCV_ACLINT_DEFAULT_MTIMER_SIZE,
+            base_hartid,
+            hart_count,
+            RISCV_ACLINT_DEFAULT_MTIMECMP,
+            RISCV_ACLINT_DEFAULT_MTIME,
+            RISCV_ACLINT_DEFAULT_TIMEBASE_FREQ,
+            true);
+    }
+}
+
+/* 创建三路 UART 串口设备 */
+static void quard_star_serial_create(MachineState *machine)
+{
+    QuardStarState *s = QUARD_STAR_MACHINE(machine);
+    MemoryRegion *system_memory = get_system_memory();
+
+    /* 创建 UART0，中断接入 PLIC */
+    serial_mm_init(
+        system_memory,
+        quard_star_memmap[QUARD_STAR_UART0].base,
+        0,
+        qdev_get_gpio_in(DEVICE(s->plic[0]), QUARD_STAR_UART0_IRQ),
+        399193,
+        serial_hd(0),
+        DEVICE_LITTLE_ENDIAN);
+
+    /* 创建 UART1，中断接入 PLIC */
+    serial_mm_init(
+        system_memory,
+        quard_star_memmap[QUARD_STAR_UART1].base,
+        0,
+        qdev_get_gpio_in(DEVICE(s->plic[0]), QUARD_STAR_UART1_IRQ),
+        399193,
+        serial_hd(1),
+        DEVICE_LITTLE_ENDIAN);
+
+    /* 创建 UART2，中断接入 PLIC */
+    serial_mm_init(
+        system_memory,
+        quard_star_memmap[QUARD_STAR_UART2].base,
+        0,
+        qdev_get_gpio_in(DEVICE(s->plic[0]), QUARD_STAR_UART2_IRQ),
+        399193,
+        serial_hd(2),
+        DEVICE_LITTLE_ENDIAN);
+}
+
+/* 创建 RTC 实时时钟设备 */
+static void quard_star_rtc_create(MachineState *machine)
+{
+    QuardStarState *s = QUARD_STAR_MACHINE(machine);
+
+    /* 将 RTC 映射到物理地址，中断接入 PLIC */
+    sysbus_create_simple(
+        "goldfish_rtc",
+        quard_star_memmap[QUARD_STAR_RTC].base,
+        qdev_get_gpio_in(DEVICE(s->plic[0]),
+                         QUARD_STAR_RTC_IRQ));
+}
+
+/* 创建 virtio-mmio 设备接口 */
+static void quard_star_virtio_mmio_create(MachineState *machine)
+{
+    QuardStarState *s = QUARD_STAR_MACHINE(machine);
+
+    /* 创建 virtio-mmio 0，中断接入 PLIC */
+    sysbus_create_simple(
+        "virtio-mmio",
+        quard_star_memmap[QUARD_STAR_VIRTIO0].base,
+        qdev_get_gpio_in(DEVICE(s->plic[0]),
+                         QUARD_STAR_VIRTIO0_IRQ));
 }
 
 /* Quard Star 板卡硬件初始化入口 */
@@ -155,6 +354,12 @@ static void quard_star_machine_init(MachineState *machine)
 {
     quard_star_cpu_create(machine);
     quard_star_memory_create(machine);
+    quard_star_flash_create(machine);
+    quard_star_plic_create(machine);
+    quard_star_aclint_create(machine);
+    quard_star_serial_create(machine);
+    quard_star_rtc_create(machine);
+    quard_star_virtio_mmio_create(machine);
 }
 
 /* 初始化 Quard Star Machine 类 */

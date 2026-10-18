@@ -88,3 +88,9 @@ config SPIKE
 config QUARD_STAR
     bool
     select RISCV_NUMA
+    select RISCV_ACLINT
+    select SIFIVE_PLIC
+    select SERIAL
+    select PFLASH_CFI01
+    select GOLDFISH_RTC
+    select VIRTIO_MMIO
