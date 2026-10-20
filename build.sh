@@ -26,7 +26,7 @@ fi
 make -j"$(nproc)"
 make install
 
-# 准备启动镜像构建目录
+# 准备 Boot 测试固件构建目录
 mkdir -p "$BUILD_DIR/boot"
 # 预处理并编译启动汇编，生成目标文件
 "${CROSS_PREFIX}gcc" \
@@ -34,7 +34,7 @@ mkdir -p "$BUILD_DIR/boot"
     -fno-pie \
     -c "$PROJECT_ROOT/boot/start.S" \
     -o "$BUILD_DIR/boot/start.o"
-# 按链接脚本链接目标文件，生成启动 ELF 和映射文件
+# 按链接脚本链接目标文件，生成 Boot 测试固件 ELF 和映射文件
 "${CROSS_PREFIX}gcc" \
     -nostdlib \
     -no-pie \
@@ -52,7 +52,7 @@ mkdir -p "$BUILD_DIR/boot"
     --wide \
     "$BUILD_DIR/boot/boot.elf" \
     > "$BUILD_DIR/boot/boot.lst"
-# 去掉符号并提取纯二进制启动镜像
+# 去掉符号并提取纯二进制 Boot 测试镜像
 "${CROSS_PREFIX}objcopy" \
     -O binary \
     -S \
@@ -66,7 +66,7 @@ dd if=/dev/zero \
     of="$OUTPUT_DIR/fw/fw.bin" \
     bs=1K count=32768 \
     status=none
-# 将启动镜像写入固件镜像起始位置
+# 将 Boot 测试镜像写入固件镜像起始位置
 dd if="$BUILD_DIR/boot/boot.bin" \
     of="$OUTPUT_DIR/fw/fw.bin" \
     bs=1K seek=0 \

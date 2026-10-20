@@ -1,5 +1,5 @@
 /*
- * 启动镜像链接脚本：指定 RISC-V 架构、入口符号 _start 和 flash 段布局
+ * Boot 测试固件链接脚本：指定 RISC-V 架构、入口符号 _start 和 flash 段布局
  */
 
 OUTPUT_ARCH("riscv")
@@ -8,7 +8,7 @@ OUTPUT_ARCH("riscv")
 ENTRY(_start)
 
 /*
- * QEMU 在 0x20000000 处映射 pflash，这里划分 512K 供启动镜像使用
+ * QEMU 在 0x20000000 处映射 pflash，这里划分 512K 供 Boot 测试固件使用
  * rxai!w 表示只读、可执行、可分配、已初始化，禁止写入
  */
 MEMORY
