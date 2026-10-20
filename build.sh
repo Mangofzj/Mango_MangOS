@@ -59,6 +59,39 @@ mkdir -p "$BUILD_DIR/boot"
     "$BUILD_DIR/boot/boot.elf" \
     "$BUILD_DIR/boot/boot.bin"
 
+# 准备 FSBL 固件构建目录
+mkdir -p "$BUILD_DIR/fsbl"
+# 预处理并编译启动汇编，生成目标文件
+"${CROSS_PREFIX}gcc" \
+    -x assembler-with-cpp \
+    -fno-pie \
+    -c "$PROJECT_ROOT/fsbl/start.S" \
+    -o "$BUILD_DIR/fsbl/start.o"
+# 按链接脚本链接目标文件，生成 FSBL 固件 ELF 和映射文件
+"${CROSS_PREFIX}gcc" \
+    -nostdlib \
+    -no-pie \
+    -T "$PROJECT_ROOT/fsbl/fsbl.ld" \
+    -Wl,-Map="$BUILD_DIR/fsbl/fsbl.map" \
+    -Wl,--gc-sections \
+    "$BUILD_DIR/fsbl/start.o" \
+    -o "$BUILD_DIR/fsbl/fsbl.elf"
+# 导出含重定位信息的反汇编清单
+"${CROSS_PREFIX}objdump" \
+    --source \
+    --demangle \
+    --disassemble \
+    --reloc \
+    --wide \
+    "$BUILD_DIR/fsbl/fsbl.elf" \
+    > "$BUILD_DIR/fsbl/fsbl.lst"
+# 去掉符号并提取纯二进制 FSBL 固件
+"${CROSS_PREFIX}objcopy" \
+    -O binary \
+    -S \
+    "$BUILD_DIR/fsbl/fsbl.elf" \
+    "$BUILD_DIR/fsbl/fsbl.bin"
+
 # 准备固件镜像输出目录
 mkdir -p "$OUTPUT_DIR/fw"
 # 生成 32 MiB 全零固件镜像
@@ -66,8 +99,8 @@ dd if=/dev/zero \
     of="$OUTPUT_DIR/fw/fw.bin" \
     bs=1K count=32768 \
     status=none
-# 将 Boot 测试镜像写入固件镜像起始位置
-dd if="$BUILD_DIR/boot/boot.bin" \
+# 将 FSBL 镜像写入固件镜像起始位置
+dd if="$BUILD_DIR/fsbl/fsbl.bin" \
     of="$OUTPUT_DIR/fw/fw.bin" \
     bs=1K seek=0 \
     conv=notrunc \
