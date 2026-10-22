@@ -1,0 +1,276 @@
+/*
+ * Quard Star 平台设备树：8 核 RISC-V CPU、内存布局与基础外设描述
+ */
+
+/ {
+    #address-cells = <2>;
+    #size-cells = <2>;
+    compatible = "mango,quard-star";
+    model = "mango,quard-star,qemu";
+
+    /* 物理内存：起始 0x80000000，大小 0x40000000（1 GiB） */
+    memory@80000000 {
+        device_type = "memory";
+        reg = <0x0 0x80000000 0x0 0x40000000>;
+    };
+
+    /*
+     * 8 个 Hart，均使用 rv64imafdchsu 指令集与 Sv57 分页；
+     * core0_ic ~ core7_ic 为各 Hart 的 CPU 中断控制器
+     */
+    cpus {
+        #address-cells = <1>;
+        #size-cells = <0>;
+        /* 时间基准频率 10 MHz，供 mtime 计数与定时器换算使用 */
+        timebase-frequency = <10000000>;
+
+        cpu0: cpu@0 {
+            device_type = "cpu";
+            reg = <0>;
+            status = "okay";
+            compatible = "riscv";
+            riscv,isa = "rv64imafdchsu";
+            mmu-type = "riscv,sv57";
+
+            core0_ic: interrupt-controller {
+                #interrupt-cells = <1>;
+                interrupt-controller;
+                compatible = "riscv,cpu-intc";
+            };
+        };
+
+        cpu1: cpu@1 {
+            device_type = "cpu";
+            reg = <1>;
+            status = "okay";
+            compatible = "riscv";
+            riscv,isa = "rv64imafdchsu";
+            mmu-type = "riscv,sv57";
+
+            core1_ic: interrupt-controller {
+                #interrupt-cells = <1>;
+                interrupt-controller;
+                compatible = "riscv,cpu-intc";
+            };
+        };
+
+        cpu2: cpu@2 {
+            device_type = "cpu";
+            reg = <2>;
+            status = "okay";
+            compatible = "riscv";
+            riscv,isa = "rv64imafdchsu";
+            mmu-type = "riscv,sv57";
+
+            core2_ic: interrupt-controller {
+                #interrupt-cells = <1>;
+                interrupt-controller;
+                compatible = "riscv,cpu-intc";
+            };
+        };
+
+        cpu3: cpu@3 {
+            device_type = "cpu";
+            reg = <3>;
+            status = "okay";
+            compatible = "riscv";
+            riscv,isa = "rv64imafdchsu";
+            mmu-type = "riscv,sv57";
+
+            core3_ic: interrupt-controller {
+                #interrupt-cells = <1>;
+                interrupt-controller;
+                compatible = "riscv,cpu-intc";
+            };
+        };
+
+        cpu4: cpu@4 {
+            device_type = "cpu";
+            reg = <4>;
+            status = "okay";
+            compatible = "riscv";
+            riscv,isa = "rv64imafdchsu";
+            mmu-type = "riscv,sv57";
+
+            core4_ic: interrupt-controller {
+                #interrupt-cells = <1>;
+                interrupt-controller;
+                compatible = "riscv,cpu-intc";
+            };
+        };
+
+        cpu5: cpu@5 {
+            device_type = "cpu";
+            reg = <5>;
+            status = "okay";
+            compatible = "riscv";
+            riscv,isa = "rv64imafdchsu";
+            mmu-type = "riscv,sv57";
+
+            core5_ic: interrupt-controller {
+                #interrupt-cells = <1>;
+                interrupt-controller;
+                compatible = "riscv,cpu-intc";
+            };
+        };
+
+        cpu6: cpu@6 {
+            device_type = "cpu";
+            reg = <6>;
+            status = "okay";
+            compatible = "riscv";
+            riscv,isa = "rv64imafdchsu";
+            mmu-type = "riscv,sv57";
+
+            core6_ic: interrupt-controller {
+                #interrupt-cells = <1>;
+                interrupt-controller;
+                compatible = "riscv,cpu-intc";
+            };
+        };
+
+        cpu7: cpu@7 {
+            device_type = "cpu";
+            reg = <7>;
+            status = "okay";
+            compatible = "riscv";
+            riscv,isa = "rv64imafdchsu";
+            mmu-type = "riscv,sv57";
+
+            core7_ic: interrupt-controller {
+                #interrupt-cells = <1>;
+                interrupt-controller;
+                compatible = "riscv,cpu-intc";
+            };
+        };
+
+        /* 拓扑映射：8 个 Hart 同属 cluster0 */
+        cpu-map {
+            cluster0 {
+                core0 { cpu = <&cpu0>; };
+                core1 { cpu = <&cpu1>; };
+                core2 { cpu = <&cpu2>; };
+                core3 { cpu = <&cpu3>; };
+                core4 { cpu = <&cpu4>; };
+                core5 { cpu = <&cpu5>; };
+                core6 { cpu = <&cpu6>; };
+                core7 { cpu = <&cpu7>; };
+            };
+        };
+    };
+
+    /* 外设总线：空的 ranges 表示子节点地址直接映射到物理地址 */
+    soc {
+        #address-cells = <2>;
+        #size-cells = <2>;
+        compatible = "simple-bus";
+        ranges;
+
+        /* ACLINT 机器模式软件中断控制器，每个 Hart 对应一个 MSIP 寄存器 */
+        aclint_mswi: aclint-mswi@2000000 {
+            compatible = "riscv,aclint-mswi";
+            interrupts-extended = <&core0_ic 3>,
+                                  <&core1_ic 3>,
+                                  <&core2_ic 3>,
+                                  <&core3_ic 3>,
+                                  <&core4_ic 3>,
+                                  <&core5_ic 3>,
+                                  <&core6_ic 3>,
+                                  <&core7_ic 3>;
+            reg = <0x0 0x2000000 0x0 0x4000>;
+            interrupt-controller;
+            #interrupt-cells = <0>;
+        };
+
+        /*
+         * ACLINT 机器模式定时器：0x200bff8 为共享的 mtime 计数器，
+         * 0x2004000 起为各 Hart 的 mtimecmp
+         */
+        aclint_mtimer: aclint-mtimer@200bff8 {
+            compatible = "riscv,aclint-mtimer";
+            interrupts-extended = <&core0_ic 7>,
+                                  <&core1_ic 7>,
+                                  <&core2_ic 7>,
+                                  <&core3_ic 7>,
+                                  <&core4_ic 7>,
+                                  <&core5_ic 7>,
+                                  <&core6_ic 7>,
+                                  <&core7_ic 7>;
+            reg = <0x0 0x200bff8 0x0 0x8>,
+                  <0x0 0x2004000 0x0 0x7ff8>;
+        };
+
+        /*
+         * PLIC：127 个中断源；每个 Hart 依次给出 M 模式上下文（外部中断号 11）
+         * 与 S 模式上下文（外部中断号 9）
+         */
+        plic: plic@c000000 {
+            compatible = "sifive,plic-1.0.0";
+            reg = <0x0 0xc000000 0x0 0x210000>;
+            #interrupt-cells = <1>;
+            #address-cells = <0>;
+            interrupts-extended = <&core0_ic 11 &core0_ic 9>,
+                                  <&core1_ic 11 &core1_ic 9>,
+                                  <&core2_ic 11 &core2_ic 9>,
+                                  <&core3_ic 11 &core3_ic 9>,
+                                  <&core4_ic 11 &core4_ic 9>,
+                                  <&core5_ic 11 &core5_ic 9>,
+                                  <&core6_ic 11 &core6_ic 9>,
+                                  <&core7_ic 11 &core7_ic 9>;
+            interrupt-controller;
+            riscv,ndev = <127>;
+        };
+
+        /* 3 路 NS16550A 串口，分别使用 PLIC 中断号 10、11、12 */
+        uart0: uart@10000000 {
+            compatible = "ns16550a";
+            reg = <0x0 0x10000000 0x0 0x1000>;
+            interrupts = <10>;
+            interrupt-parent = <&plic>;
+            clock-frequency = <6387088>;
+            status = "disabled";
+        };
+
+        uart1: uart@10001000 {
+            compatible = "ns16550a";
+            reg = <0x0 0x10001000 0x0 0x1000>;
+            interrupts = <11>;
+            interrupt-parent = <&plic>;
+            clock-frequency = <6387088>;
+            status = "disabled";
+        };
+
+        uart2: uart@10002000 {
+            compatible = "ns16550a";
+            reg = <0x0 0x10002000 0x0 0x1000>;
+            interrupts = <12>;
+            interrupt-parent = <&plic>;
+            clock-frequency = <6387088>;
+            status = "disabled";
+        };
+
+        rtc: rtc@10003000 {
+            compatible = "google,goldfish-rtc";
+            reg = <0x0 0x10003000 0x0 0x1000>;
+            interrupts = <13>;
+            interrupt-parent = <&plic>;
+            status = "disabled";
+        };
+
+        virtio0: virtio@10100000 {
+            compatible = "virtio,mmio";
+            reg = <0x0 0x10100000 0x0 0x1000>;
+            interrupts = <1>;
+            interrupt-parent = <&plic>;
+            status = "disabled";
+        };
+
+        pflash: flash@20000000 {
+            compatible = "cfi-flash";
+            reg = <0x0 0x20000000 0x0 0x2000000>;
+            bank-width = <4>;
+            device-width = <2>;
+            status = "disabled";
+        };
+    };
+};

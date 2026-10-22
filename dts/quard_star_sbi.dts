@@ -1,0 +1,19 @@
+/dts-v1/;
+
+/*
+ * Quard Star OpenSBI 设备树：指定控制台串口并启用 uart0
+ */
+
+#include "quard_star.dtsi"
+
+/ {
+    /* 指定 OpenSBI 控制台使用 uart0 */
+    chosen {
+        stdout-path = "/soc/uart@10000000";
+    };
+};
+
+/* 覆盖平台设备树，启用默认禁用的 uart0 */
+&uart0 {
+    status = "okay";
+};

@@ -92,6 +92,23 @@ mkdir -p "$BUILD_DIR/fsbl"
     "$BUILD_DIR/fsbl/fsbl.elf" \
     "$BUILD_DIR/fsbl/fsbl.bin"
 
+# 准备设备树构建目录与输出目录
+mkdir -p "$BUILD_DIR/dts" "$OUTPUT_DIR/dts"
+# 预处理设备树源文件，展开宏与包含的文件
+cpp \
+    -nostdinc \
+    -I "$PROJECT_ROOT/dts" \
+    -undef \
+    -x assembler-with-cpp \
+    "$PROJECT_ROOT/dts/quard_star_sbi.dts" \
+    > "$BUILD_DIR/dts/quard_star_sbi.dts"
+# 编译预处理后的设备树，生成二进制设备树文件（DTB）
+dtc \
+    -I dts \
+    -O dtb \
+    -o "$OUTPUT_DIR/dts/quard_star_sbi.dtb" \
+    "$BUILD_DIR/dts/quard_star_sbi.dts"
+
 # 准备固件镜像输出目录
 mkdir -p "$OUTPUT_DIR/fw"
 # 生成 32 MiB 全零固件镜像
@@ -103,5 +120,11 @@ dd if=/dev/zero \
 dd if="$BUILD_DIR/fsbl/fsbl.bin" \
     of="$OUTPUT_DIR/fw/fw.bin" \
     bs=1K seek=0 \
+    conv=notrunc \
+    status=none
+# 将 DTB 写入固件镜像的 512 KiB 偏移处，位于 FSBL 固件区之后
+dd if="$OUTPUT_DIR/dts/quard_star_sbi.dtb" \
+    of="$OUTPUT_DIR/fw/fw.bin" \
+    bs=1K seek=512 \
     conv=notrunc \
     status=none
