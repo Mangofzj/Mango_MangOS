@@ -10,6 +10,7 @@ BUILD_DIR="$PROJECT_ROOT/build"
 OUTPUT_DIR="$PROJECT_ROOT/output"
 mkdir -p "$BUILD_DIR" "$OUTPUT_DIR"
 
+echo "===================== Build QEMU ====================="
 # 在源码树外的独立目录中构建 QEMU
 mkdir -p "$BUILD_DIR/qemu"
 cd "$BUILD_DIR/qemu"
@@ -26,6 +27,7 @@ fi
 make -j"$(nproc)"
 make install
 
+echo "===================== Build Boot ====================="
 # 准备 Boot 测试固件构建目录
 mkdir -p "$BUILD_DIR/boot"
 # 预处理并编译启动汇编，生成目标文件
@@ -59,8 +61,9 @@ mkdir -p "$BUILD_DIR/boot"
     "$BUILD_DIR/boot/boot.elf" \
     "$BUILD_DIR/boot/boot.bin"
 
-# 准备 FSBL 固件构建目录
-mkdir -p "$BUILD_DIR/fsbl"
+echo "===================== Build FSBL ====================="
+# 准备 FSBL 固件构建目录与输出目录
+mkdir -p "$BUILD_DIR/fsbl" "$OUTPUT_DIR/fsbl"
 # 预处理并编译启动汇编，生成目标文件
 "${CROSS_PREFIX}gcc" \
     -x assembler-with-cpp \
@@ -90,8 +93,9 @@ mkdir -p "$BUILD_DIR/fsbl"
     -O binary \
     -S \
     "$BUILD_DIR/fsbl/fsbl.elf" \
-    "$BUILD_DIR/fsbl/fsbl.bin"
+    "$OUTPUT_DIR/fsbl/fsbl.bin"
 
+echo "===================== Build Device Tree ====================="
 # 准备设备树构建目录与输出目录
 mkdir -p "$BUILD_DIR/dts" "$OUTPUT_DIR/dts"
 # 预处理设备树源文件，展开宏与包含的文件
@@ -109,6 +113,7 @@ dtc \
     -o "$OUTPUT_DIR/dts/quard_star_sbi.dtb" \
     "$BUILD_DIR/dts/quard_star_sbi.dts"
 
+echo "===================== Build OpenSBI ====================="
 # 准备 OpenSBI 固件构建目录与输出目录
 mkdir -p "$BUILD_DIR/opensbi" "$OUTPUT_DIR/opensbi"
 # 使用交叉工具链编译 quard_star 平台的 OpenSBI 固件
@@ -132,6 +137,7 @@ cp "$BUILD_DIR/opensbi/platform/quard_star/firmware/fw_jump.bin" \
     "$OUTPUT_DIR/opensbi/fw_jump.elf" \
     > "$OUTPUT_DIR/opensbi/fw_jump.lst"
 
+echo "===================== Package Firmware ====================="
 # 准备固件镜像输出目录
 mkdir -p "$OUTPUT_DIR/fw"
 # 生成 32 MiB 全零固件镜像
@@ -140,7 +146,7 @@ dd if=/dev/zero \
     bs=1K count=32768 \
     status=none
 # 将 FSBL 镜像写入固件镜像起始位置
-dd if="$BUILD_DIR/fsbl/fsbl.bin" \
+dd if="$OUTPUT_DIR/fsbl/fsbl.bin" \
     of="$OUTPUT_DIR/fw/fw.bin" \
     bs=1K seek=0 \
     conv=notrunc \
@@ -157,3 +163,4 @@ dd if="$OUTPUT_DIR/opensbi/fw_jump.bin" \
     bs=1K seek=2048 \
     conv=notrunc \
     status=none
+echo "===================== Build Complete ====================="
