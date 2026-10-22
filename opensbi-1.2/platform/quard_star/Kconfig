@@ -1,0 +1,4 @@
+config PLATFORM_QUARD_STAR
+	bool
+	select FDT
+	default y

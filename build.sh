@@ -109,6 +109,29 @@ dtc \
     -o "$OUTPUT_DIR/dts/quard_star_sbi.dtb" \
     "$BUILD_DIR/dts/quard_star_sbi.dts"
 
+# 准备 OpenSBI 固件构建目录与输出目录
+mkdir -p "$BUILD_DIR/opensbi" "$OUTPUT_DIR/opensbi"
+# 使用交叉工具链编译 quard_star 平台的 OpenSBI 固件
+make -C "$PROJECT_ROOT/opensbi-1.2" \
+    O="$BUILD_DIR/opensbi" \
+    CROSS_COMPILE="$CROSS_PREFIX" \
+    PLATFORM=quard_star \
+    -j"$(nproc)"
+# 将 OpenSBI 的 ELF 与二进制固件复制到输出目录
+cp "$BUILD_DIR/opensbi/platform/quard_star/firmware/fw_jump.elf" \
+   "$OUTPUT_DIR/opensbi/fw_jump.elf"
+cp "$BUILD_DIR/opensbi/platform/quard_star/firmware/fw_jump.bin" \
+   "$OUTPUT_DIR/opensbi/fw_jump.bin"
+# 导出含重定位信息的反汇编清单
+"${CROSS_PREFIX}objdump" \
+    --source \
+    --demangle \
+    --disassemble \
+    --reloc \
+    --wide \
+    "$OUTPUT_DIR/opensbi/fw_jump.elf" \
+    > "$OUTPUT_DIR/opensbi/fw_jump.lst"
+
 # 准备固件镜像输出目录
 mkdir -p "$OUTPUT_DIR/fw"
 # 生成 32 MiB 全零固件镜像
@@ -126,5 +149,11 @@ dd if="$BUILD_DIR/fsbl/fsbl.bin" \
 dd if="$OUTPUT_DIR/dts/quard_star_sbi.dtb" \
     of="$OUTPUT_DIR/fw/fw.bin" \
     bs=1K seek=512 \
+    conv=notrunc \
+    status=none
+# 将 OpenSBI 镜像写入固件镜像的 2 MiB 偏移处
+dd if="$OUTPUT_DIR/opensbi/fw_jump.bin" \
+    of="$OUTPUT_DIR/fw/fw.bin" \
+    bs=1K seek=2048 \
     conv=notrunc \
     status=none
