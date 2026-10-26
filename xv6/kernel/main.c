@@ -1,15 +1,14 @@
-#include "sbi.h"
+#include "types.h"
+#include "defs.h"
 
 void
 main(void)
 {
-    const char *msg = "Hello, xv6!\n";
+    printfinit();
 
-    while (*msg) {
-        sbi_console_putchar(*msg);
-        msg++;
-    }
+    printf("\n");
+    printf("Hello, xv6!\n");
+    printf("\n");
 
-    for (;;)
-        ;
+    while (1);
 }

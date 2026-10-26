@@ -4,7 +4,8 @@ K=kernel
 OBJS = \
   $K/entry.o \
   $K/main.o \
-  $K/sbi.o
+  $K/sbi.o \
+  $K/printf.o
 
 TOOLPREFIX = riscv64-unknown-elf-
 
