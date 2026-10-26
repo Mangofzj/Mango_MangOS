@@ -5,6 +5,7 @@
 # Editor/IDE
 .vscode/
 .idea/
+.editorconfig
 *.swp
 *.swo
 *~
