@@ -36,6 +36,12 @@ _start:
 	li	a2, 0x82280000
 	load_data	a0, a1, a2
 
+	# 将 pflash 0x20800000 处的 4 MiB xv6 内核镜像区搬到 DDR 0x80200000
+	li	a0, 0x20800000
+	li	a1, 0x80200000
+	li	a2, 0x80600000
+	load_data	a0, a1, a2
+
 	# 设置 OpenSBI 入口参数：a0 为 hart ID，a1 为设备树地址
 	mv	a0, s0
 	li	a1, 0x82200000

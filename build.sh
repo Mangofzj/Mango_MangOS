@@ -137,6 +137,19 @@ cp "$BUILD_DIR/opensbi/platform/quard_star/firmware/fw_jump.bin" \
     "$OUTPUT_DIR/opensbi/fw_jump.elf" \
     > "$OUTPUT_DIR/opensbi/fw_jump.lst"
 
+echo "===================== Build xv6 ====================="
+# 准备 xv6 输出目录
+mkdir -p "$OUTPUT_DIR/xv6"
+# 使用交叉工具链编译 xv6 内核
+make -C "$PROJECT_ROOT/xv6" \
+    TOOLPREFIX="$CROSS_PREFIX" \
+    kernel/kernel.bin
+# 将 xv6 内核的 ELF 与二进制镜像复制到输出目录
+cp "$PROJECT_ROOT/xv6/kernel/kernel" \
+   "$OUTPUT_DIR/xv6/kernel.elf"
+cp "$PROJECT_ROOT/xv6/kernel/kernel.bin" \
+   "$OUTPUT_DIR/xv6/kernel.bin"
+
 echo "===================== Package Firmware ====================="
 # 准备固件镜像输出目录
 mkdir -p "$OUTPUT_DIR/fw"
@@ -163,4 +176,10 @@ dd if="$OUTPUT_DIR/opensbi/fw_jump.bin" \
     bs=1K seek=2048 \
     conv=notrunc \
     status=none
+# 将 xv6 内核镜像写入固件镜像的 8 MiB 偏移处
+dd if="$OUTPUT_DIR/xv6/kernel.bin" \
+   of="$OUTPUT_DIR/fw/fw.bin" \
+   bs=1K seek=8192 \
+   conv=notrunc \
+   status=none
 echo "===================== Build Complete ====================="
