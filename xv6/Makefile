@@ -2,10 +2,12 @@
 K=kernel
 
 OBJS = \
-  $K/entry.o \
-  $K/main.o \
-  $K/sbi.o \
-  $K/printf.o
+	$K/entry.o \
+	$K/main.o \
+	$K/sbi.o \
+	$K/printf.o \
+	$K/kalloc.o \
+	$K/string.o
 
 TOOLPREFIX = riscv64-unknown-elf-
 

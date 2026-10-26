@@ -10,5 +10,7 @@ main(void)
     printf("Hello, xv6!\n");
     printf("\n");
 
+    kinit();
+
     while (1);
 }
