@@ -88,7 +88,7 @@ printf(char *fmt, ...)
         } else if (c0 == 'c') {
             sbi_console_putchar(va_arg(ap, uint));
         } else if (c0 == 's') {
-            if ((s = va_arg(ap, char*)) == 0)
+            if ((s = va_arg(ap, char *)) == 0)
                 s = "(null)";
             for (; *s; s++)
                 sbi_console_putchar(*s);
