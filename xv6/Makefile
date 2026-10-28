@@ -7,7 +7,10 @@ OBJS = \
 	$K/sbi.o \
 	$K/printf.o \
 	$K/kalloc.o \
-	$K/string.o
+	$K/string.o \
+	$K/proc.o \
+	$K/swtch.o \
+	$K/user.o
 
 TOOLPREFIX = riscv64-unknown-elf-
 

@@ -11,6 +11,10 @@ main(void)
     printf("\n");
 
     kinit();
+    procinit();
+    userinit();
+
+    scheduler();
 
     while (1);
 }
