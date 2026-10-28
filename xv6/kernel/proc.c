@@ -35,6 +35,14 @@ mycpu(void)
     return c;
 }
 
+struct proc *
+myproc(void)
+{
+    struct cpu *c = mycpu();
+    struct proc *p = c->proc;
+    return p;
+}
+
 int
 allocpid()
 {
@@ -75,6 +83,13 @@ userinit(void)
     struct proc *p;
 
     p = allocproc(user_task0);
+    if (p == 0)
+        panic("userinit: allocproc task0 failed");
+    p->state = RUNNABLE;
+
+    p = allocproc(user_task1);
+    if (p == 0)
+        panic("userinit: allocproc task1 failed");
     p->state = RUNNABLE;
 }
 
@@ -95,4 +110,23 @@ scheduler(void)
             }
         }
     }
+}
+
+void
+sched(void)
+{
+    struct proc *p = myproc();
+
+    if (p->state == RUNNING)
+        panic("sched RUNNING");
+
+    swtch(&p->context, &mycpu()->context);
+}
+
+void
+yield(void)
+{
+    struct proc *p = myproc();
+    p->state = RUNNABLE;
+    sched();
 }
