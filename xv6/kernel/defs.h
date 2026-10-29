@@ -27,6 +27,10 @@ void yield(void);
 /* swtch.S */
 void swtch(struct context *, struct context *);
 
+/* trap.c */
+void trapinit(void);
+void trapinithart(void);
+
 /* user.c */
 void user_task0(void);
 void user_task1(void);
