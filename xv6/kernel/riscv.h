@@ -3,6 +3,7 @@
 #define SSTATUS_SPP (1L << 8)
 #define SSTATUS_SIE (1L << 1)
 #define SIE_SEIE (1L << 9)
+#define SIE_STIE (1L << 5)
 
 static inline uint64
 r_sstatus()
@@ -67,6 +68,14 @@ static inline void
 w_sie(uint64 x)
 {
     asm volatile("csrw sie, %0" : : "r" (x));
+}
+
+static inline uint64
+r_time()
+{
+    uint64 x;
+    asm volatile("csrr %0, time" : "=r" (x));
+    return x;
 }
 
 static inline void

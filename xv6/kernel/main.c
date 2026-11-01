@@ -18,6 +18,7 @@ main(void)
     plicinit();
     plicinithart();
     userinit();
+    timerinit();
 
     scheduler();
 

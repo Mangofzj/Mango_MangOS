@@ -15,7 +15,7 @@ trapinithart(void)
 {
     w_stvec((uint64)kernelvec);
 
-    w_sie(r_sie() | SIE_SEIE);
+    w_sie(r_sie() | SIE_SEIE | SIE_STIE);
 }
 
 void
@@ -35,6 +35,9 @@ kerneltrap(void)
         printf("scause=0x%lx sepc=0x%lx stval=0x%lx\n", scause, r_sepc(), r_stval());
         panic("kerneltrap");
     }
+
+    if (which_dev == 2 && myproc() != 0)
+        printf("--> timer interrupt\n");
 }
 
 int
@@ -54,6 +57,11 @@ devintr()
             plic_complete(irq);
 
         return 1;
-    } else
+    } else if (scause == 0x8000000000000005L) {
+        clockintr();
+
+        return 2;
+    } else {
         return 0;
+    }
 }

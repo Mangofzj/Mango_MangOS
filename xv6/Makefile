@@ -13,6 +13,7 @@ OBJS = \
 	$K/user.o \
 	$K/trap.o \
 	$K/uart.o \
+	$K/timer.o \
 	$K/kernelvec.o \
 	$K/plic.o
 

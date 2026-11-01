@@ -1,7 +1,23 @@
-
-#include "sbi.h"
 #include <stdint.h>
 
+#include "sbi.h"
+
+/**
+ * @brief 发起一次 SBI 调用。
+ *
+ * ext 与 fid 选择扩展功能，arg0~arg5 依次传入 a0~a5；
+ * 调用返回后 a0 为错误码，a1 为返回值。
+ *
+ * @param ext 扩展 ID
+ * @param fid 功能号
+ * @param arg0 扩展功能参数 0
+ * @param arg1 扩展功能参数 1
+ * @param arg2 扩展功能参数 2
+ * @param arg3 扩展功能参数 3
+ * @param arg4 扩展功能参数 4
+ * @param arg5 扩展功能参数 5
+ * @return SBI 调用的错误码与返回值
+ */
 struct sbiret
 sbi_ecall(int ext, int fid, unsigned long arg0,
           unsigned long arg1, unsigned long arg2,
@@ -31,8 +47,24 @@ sbi_ecall(int ext, int fid, unsigned long arg0,
     return ret;
 }
 
+/**
+ * @brief 向 SBI 控制台输出一个字符。
+ *
+ * @param ch 待输出的字符
+ */
 void
 sbi_console_putchar(int ch)
 {
     sbi_ecall(SBI_EXT_0_1_CONSOLE_PUTCHAR, 0, ch, 0, 0, 0, 0, 0);
+}
+
+/**
+ * @brief 设置下一次定时器中断的时间。
+ *
+ * @param stime_value 定时器触发时刻的 stime 值
+ */
+void
+sbi_set_timer(unsigned long stime_value)
+{
+    sbi_ecall(SBI_EXT_TIME, SBI_EXT_TIME_SET_TIMER, stime_value, 0, 0, 0, 0, 0);
 }

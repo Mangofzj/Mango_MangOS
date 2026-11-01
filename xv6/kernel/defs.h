@@ -30,6 +30,7 @@ void swtch(struct context *, struct context *);
 /* trap.c */
 void trapinit(void);
 void trapinithart(void);
+int devintr(void);
 
 /* uart.c */
 void uartinit(void);
@@ -42,8 +43,9 @@ void plicinithart(void);
 int plic_claim(void);
 void plic_complete(int);
 
-/* trap.c */
-int devintr(void);
+/* timer.c */
+void timerinit(void);
+void clockintr(void);
 
 /* user.c */
 void user_task0(void);
