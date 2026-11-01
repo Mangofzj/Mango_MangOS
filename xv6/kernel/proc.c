@@ -99,6 +99,8 @@ scheduler(void)
     struct proc *p;
     struct cpu *c = mycpu();
 
+    intr_on();
+
     c->proc = 0;
     for (;;) {
         for (p = proc; p < &proc[NPROC]; p++) {

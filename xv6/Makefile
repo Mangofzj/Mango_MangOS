@@ -12,7 +12,9 @@ OBJS = \
 	$K/swtch.o \
 	$K/user.o \
 	$K/trap.o \
-	$K/kernelvec.o
+	$K/uart.o \
+	$K/kernelvec.o \
+	$K/plic.o
 
 TOOLPREFIX = riscv64-unknown-elf-
 

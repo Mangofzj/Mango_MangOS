@@ -14,6 +14,9 @@ main(void)
     procinit();
     trapinit();
     trapinithart();
+    uartinit();
+    plicinit();
+    plicinithart();
     userinit();
 
     scheduler();
