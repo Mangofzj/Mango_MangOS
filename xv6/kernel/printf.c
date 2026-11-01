@@ -4,6 +4,7 @@
 #include "sbi.h"
 #include "defs.h"
 
+volatile int panicked = 0;
 static char digits[] = "0123456789abcdef";
 
 static void
@@ -111,6 +112,7 @@ panic(char *s)
 {
     printf("panic: ");
     printf("%s\n", s);
+    panicked = 1;
     for (;;)
         ;
 }

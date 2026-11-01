@@ -2,6 +2,7 @@
 
 #define SSTATUS_SPP (1L << 8)
 #define SSTATUS_SIE (1L << 1)
+#define SSTATUS_SPIE (1L << 5)
 #define SIE_SEIE (1L << 9)
 #define SIE_STIE (1L << 5)
 
@@ -31,6 +32,12 @@ r_sepc()
     uint64 x;
     asm volatile("csrr %0, sepc" : "=r" (x));
     return x;
+}
+
+static inline void
+w_sepc(uint64 x)
+{
+    asm volatile("csrw sepc, %0" : : "r" (x));
 }
 
 static inline uint64

@@ -23,6 +23,7 @@ void userinit(void);
 void scheduler(void) __attribute__((noreturn));
 void sched(void);
 void yield(void);
+void kerneltrapret(void);
 
 /* swtch.S */
 void swtch(struct context *, struct context *);

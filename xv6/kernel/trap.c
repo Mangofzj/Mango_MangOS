@@ -23,6 +23,7 @@ kerneltrap(void)
 {
     int which_dev = 0;
     uint64 sstatus = r_sstatus();
+    uint64 sepc = r_sepc();
     uint64 scause = r_scause();
 
     if ((sstatus & SSTATUS_SPP) == 0)
@@ -37,7 +38,10 @@ kerneltrap(void)
     }
 
     if (which_dev == 2 && myproc() != 0)
-        printf("--> timer interrupt\n");
+        yield();
+
+    w_sepc(sepc);
+    w_sstatus(sstatus);
 }
 
 int

@@ -71,8 +71,9 @@ found:
     p->state = USED;
 
     memset(&p->context, 0, sizeof(p->context));
-    p->context.ra = (uint64)start_routin;
+    p->context.ra = (uint64)kerneltrapret;
     p->context.sp = p->kstack + PGSIZE;
+    p->start = start_routin;
 
     return p;
 }
@@ -99,8 +100,6 @@ scheduler(void)
     struct proc *p;
     struct cpu *c = mycpu();
 
-    intr_on();
-
     c->proc = 0;
     for (;;) {
         for (p = proc; p < &proc[NPROC]; p++) {
@@ -121,6 +120,8 @@ sched(void)
 
     if (p->state == RUNNING)
         panic("sched RUNNING");
+    if (intr_get())
+        panic("sched interruptible");
 
     swtch(&p->context, &mycpu()->context);
 }
@@ -131,4 +132,19 @@ yield(void)
     struct proc *p = myproc();
     p->state = RUNNABLE;
     sched();
+}
+
+void
+kerneltrapret(void)
+{
+    struct proc *p = myproc();
+
+    uint64 x = r_sstatus();
+    x |= SSTATUS_SPP;
+    x |= SSTATUS_SPIE;
+    w_sstatus(x);
+
+    w_sepc((uint64)p->start);
+
+    asm volatile("sret");
 }
