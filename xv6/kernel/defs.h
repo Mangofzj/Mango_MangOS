@@ -1,5 +1,6 @@
 struct context;
 struct proc;
+struct spinlock;
 
 /* printf.c */
 void printfinit(void);
@@ -47,6 +48,14 @@ void plic_complete(int);
 /* timer.c */
 void timerinit(void);
 void clockintr(void);
+
+/* spinlock.c */
+void push_off(void);
+void pop_off(void);
+void initlock(struct spinlock *, char *);
+int holding(struct spinlock *);
+void acquire(struct spinlock *);
+void release(struct spinlock *);
 
 /* user.c */
 void user_task0(void);

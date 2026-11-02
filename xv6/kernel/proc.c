@@ -116,6 +116,7 @@ scheduler(void)
 void
 sched(void)
 {
+    int intena;
     struct proc *p = myproc();
 
     if (p->state == RUNNING)
@@ -123,7 +124,9 @@ sched(void)
     if (intr_get())
         panic("sched interruptible");
 
+    intena = mycpu()->intena;
     swtch(&p->context, &mycpu()->context);
+    mycpu()->intena = intena;
 }
 
 void

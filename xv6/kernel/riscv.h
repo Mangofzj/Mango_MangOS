@@ -91,6 +91,12 @@ intr_on()
     w_sstatus(r_sstatus() | SSTATUS_SIE);
 }
 
+static inline void
+intr_off()
+{
+    w_sstatus(r_sstatus() & ~SSTATUS_SIE);
+}
+
 #endif
 
 #define PGSIZE  4096

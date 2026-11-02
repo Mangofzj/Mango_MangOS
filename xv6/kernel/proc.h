@@ -22,6 +22,8 @@ struct context {
 struct cpu {
     struct proc *proc;  /* 当前运行的进程 */
     struct context context;  /* 调度器上下文 */
+    int noff;  /* 中断关闭嵌套层数 */
+    int intena;  /* 中断原始使能状态 */
 };
 
 /* CPU 状态数组 */
