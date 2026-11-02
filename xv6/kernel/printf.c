@@ -2,10 +2,23 @@
 
 #include "types.h"
 #include "sbi.h"
+#include "spinlock.h"
 #include "defs.h"
 
+volatile int panicking = 0;
 volatile int panicked = 0;
+
 static char digits[] = "0123456789abcdef";
+
+static struct {
+    struct spinlock lock;
+} pr;
+
+void
+printfinit(void)
+{
+    initlock(&pr.lock, "pr");
+}
 
 static void
 printint(long long xx, int base, int sign)
@@ -48,6 +61,9 @@ printf(char *fmt, ...)
     va_list ap;
     int i, cx, c0, c1, c2;
     char *s;
+
+    if (panicking == 0)
+        acquire(&pr.lock);
 
     va_start(ap, fmt);
     for (i = 0; (cx = fmt[i] & 0xff) != 0; i++) {
@@ -104,20 +120,19 @@ printf(char *fmt, ...)
     }
     va_end(ap);
 
+    if (panicking == 0)
+        release(&pr.lock);
+
     return 0;
 }
 
 void
 panic(char *s)
 {
+    panicking = 1;
     printf("panic: ");
     printf("%s\n", s);
     panicked = 1;
     for (;;)
         ;
-}
-
-void
-printfinit(void)
-{
 }
