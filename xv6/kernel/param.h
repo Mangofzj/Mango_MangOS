@@ -1,2 +1,2 @@
-#define NCPU  1
+#define NCPU  8
 #define NPROC 64

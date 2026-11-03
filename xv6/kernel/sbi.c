@@ -68,3 +68,16 @@ sbi_set_timer(unsigned long stime_value)
 {
     sbi_ecall(SBI_EXT_TIME, SBI_EXT_TIME_SET_TIMER, stime_value, 0, 0, 0, 0, 0);
 }
+
+struct sbiret
+sbi_hart_start(unsigned long hartid, unsigned long start_addr, unsigned long opaque)
+{
+    return sbi_ecall(
+        SBI_EXT_HSM,
+        SBI_EXT_HSM_HART_START,
+        hartid,
+        start_addr,
+        opaque,
+        0, 0, 0
+    );
+}

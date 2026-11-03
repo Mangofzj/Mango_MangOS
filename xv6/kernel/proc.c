@@ -1,8 +1,8 @@
 #include "types.h"
 #include "param.h"
 #include "riscv.h"
-#include "proc.h"
 #include "spinlock.h"
+#include "proc.h"
 #include "defs.h"
 
 struct cpu cpus[NCPU];
@@ -18,6 +18,7 @@ procinit(void)
     initlock(&pid_lock, "nextpid");
 
     for (p = proc; p < &proc[NPROC]; p++) {
+        initlock(&p->lock, "proc");
         p->state = UNUSED;
         p->kstack = (uint64)kalloc();
         if (p->kstack == 0)
@@ -28,7 +29,8 @@ procinit(void)
 int
 cpuid()
 {
-    return 0;
+    int id = r_tp();
+    return id;
 }
 
 struct cpu *
@@ -42,8 +44,11 @@ mycpu(void)
 struct proc *
 myproc(void)
 {
+    push_off();
     struct cpu *c = mycpu();
     struct proc *p = c->proc;
+    pop_off();
+
     return p;
 }
 
@@ -66,8 +71,11 @@ allocproc(void (*start_routin)(void))
     struct proc *p;
 
     for (p = proc; p < &proc[NPROC]; p++) {
+        acquire(&p->lock);
         if (p->state == UNUSED) {
             goto found;
+        } else {
+            release(&p->lock);
         }
     }
     return 0;
@@ -93,11 +101,13 @@ userinit(void)
     if (p == 0)
         panic("userinit: allocproc task0 failed");
     p->state = RUNNABLE;
+    release(&p->lock);
 
     p = allocproc(user_task1);
     if (p == 0)
         panic("userinit: allocproc task1 failed");
     p->state = RUNNABLE;
+    release(&p->lock);
 }
 
 void
@@ -109,12 +119,14 @@ scheduler(void)
     c->proc = 0;
     for (;;) {
         for (p = proc; p < &proc[NPROC]; p++) {
+            acquire(&p->lock);
             if (p->state == RUNNABLE) {
                 p->state = RUNNING;
                 c->proc = p;
                 swtch(&c->context, &p->context);
                 c->proc = 0;
             }
+            release(&p->lock);
         }
     }
 }
@@ -125,6 +137,10 @@ sched(void)
     int intena;
     struct proc *p = myproc();
 
+    if (!holding(&p->lock))
+        panic("sched p->lock");
+    if (mycpu()->noff != 1)
+        panic("sched locks");
     if (p->state == RUNNING)
         panic("sched RUNNING");
     if (intr_get())
@@ -139,14 +155,19 @@ void
 yield(void)
 {
     struct proc *p = myproc();
+
+    acquire(&p->lock);
     p->state = RUNNABLE;
     sched();
+    release(&p->lock);
 }
 
 void
 kerneltrapret(void)
 {
     struct proc *p = myproc();
+
+    release(&p->lock);
 
     uint64 x = r_sstatus();
     x |= SSTATUS_SPP;

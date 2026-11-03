@@ -7,10 +7,11 @@
     .globl  _entry
 
 _entry:
-    # 保存 OpenSBI 传入的 hart ID，用于计算栈顶
+    # 保存 OpenSBI 传入的 Hart ID：tp 供 cpuid() 读取，t0 用于计算栈顶
+    mv  tp, a0
     mv  t0, a0
 
-    # 栈顶 = stack0 + (hart ID + 1) * 4096
+    # 栈顶 = stack0 + (Hart ID + 1) * 4096
     la  sp, stack0
     li  t1, 1024*4
     addi    t0, t0, 1
@@ -24,10 +25,9 @@ _entry:
 spin:
     j   spin
 
-    # 栈空间位于 .bss.stack 段，按 16 字节对齐以满足 RISC-V ABI 的栈对齐要求
+    # 栈空间位于 .bss.stack 段，共 32 KiB，每个 Hart 4 KiB；按 16 字节对齐以满足 RISC-V ABI 的栈对齐要求
     .section .bss.stack
     .align  4
     .globl  stack0
-
 stack0:
-    .space  4096
+    .space  32768

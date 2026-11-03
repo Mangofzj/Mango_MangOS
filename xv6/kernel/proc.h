@@ -34,6 +34,8 @@ enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
 /* 进程控制块 */
 struct proc {
+    struct spinlock lock;  /* 进程锁 */
+
     enum procstate state;  /* 进程状态 */
     int pid;  /* 进程 ID */
 
