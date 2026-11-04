@@ -82,6 +82,7 @@ consoleintr(int c)
             consputc(BACKSPACE);
         }
         break;
+
     default:
         /* 缓冲未满时写入字符并回显 */
         if (c != 0 && cons.e - cons.r < INPUT_BUF_SIZE) {

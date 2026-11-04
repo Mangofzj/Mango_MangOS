@@ -18,7 +18,7 @@ task_delay(volatile int count)
 #define DELAY 1000  /* 任务延时计数值 */
 
 /**
- * @brief 任务 0：循环打印运行信息并忙等延时。
+ * @brief 任务 0：打印创建信息后循环忙等延时。
  */
 void
 user_task0(void)
@@ -30,7 +30,7 @@ user_task0(void)
 }
 
 /**
- * @brief 任务 1：循环打印运行信息并忙等延时。
+ * @brief 任务 1：打印创建信息后循环忙等延时。
  */
 void
 user_task1(void)
