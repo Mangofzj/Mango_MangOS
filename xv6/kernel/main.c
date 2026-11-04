@@ -10,6 +10,7 @@ void
 main(void)
 {
     if (started == 0) {
+        consoleinit();
         printfinit();
 
         printf("\n");
@@ -20,7 +21,6 @@ main(void)
         procinit();
         trapinit();
         trapinithart();
-        uartinit();
         plicinit();
         plicinithart();
         userinit();

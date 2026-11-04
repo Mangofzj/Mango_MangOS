@@ -56,7 +56,6 @@ uartintr(void)
         if (c == -1)
             break;
 
-        sbi_console_putchar(c);
-        sbi_console_putchar('\n');
+        consoleintr(c);
     }
 }

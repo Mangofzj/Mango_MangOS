@@ -41,5 +41,6 @@ struct proc {
 
     uint64 kstack;  /* 内核栈地址 */
     struct context context;  /* 进程上下文 */
+    char name[16];  /* 进程名称 */
     void (*start)(void);  /* 任务初始入口 */
 };

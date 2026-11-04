@@ -2,6 +2,8 @@ struct context;
 struct proc;
 struct spinlock;
 
+#define NELEM(x) (sizeof(x) / sizeof((x)[0]))
+
 /* printf.c */
 void printfinit(void);
 int printf(char *, ...) __attribute__((format (printf, 1, 2)));
@@ -9,6 +11,8 @@ void panic(char *) __attribute__((noreturn));
 
 /* string.c */
 void *memset(void *, int, uint);
+char *safestrcpy(char *, const char *, int);
+int strlen(const char *);
 
 /* kalloc.c */
 void *kalloc(void);
@@ -25,6 +29,7 @@ void scheduler(void) __attribute__((noreturn));
 void sched(void);
 void yield(void);
 void kerneltrapret(void);
+void procdump(void);
 
 /* swtch.S */
 void swtch(struct context *, struct context *);
@@ -57,6 +62,14 @@ int holding(struct spinlock *);
 void acquire(struct spinlock *);
 void release(struct spinlock *);
 
+/* console.c */
+void consoleinit(void);
+void consoleintr(int);
+void consputc(int);
+int consoleread(uint64 dst, int n);
+int consolewrite(uint64 src, int n);
+
 /* user.c */
 void user_task0(void);
 void user_task1(void);
+void user_shell(void);
