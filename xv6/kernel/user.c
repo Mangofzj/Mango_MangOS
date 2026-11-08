@@ -24,7 +24,10 @@ task_delay(volatile int count)
 void
 user_task0(void)
 {
-    printf("Task 0: Created!\n");
+    volatile char c = 'R';
+
+    printf("%c @[%p]\n", c, (void *)&c);
+
     while (1) {
         task_delay(DELAY);
     }
@@ -36,7 +39,6 @@ user_task0(void)
 void
 user_task1(void)
 {
-    printf("Task 1: Created!\n");
     while (1) {
         task_delay(DELAY);
     }
