@@ -1,5 +1,6 @@
 #include "types.h"
 #include "param.h"
+#include "riscv.h"
 #include "defs.h"
 #include "sbi.h"
 
@@ -18,6 +19,8 @@ main(void)
         printf("\n");
 
         kinit();
+        kvminit();
+        kvminithart();
         procinit();
         trapinit();
         trapinithart();
@@ -46,6 +49,7 @@ main(void)
 
         printf("hart %d starting\n", cpuid());
 
+        kvminithart();
         trapinithart();
         plicinithart();
         timerinit();

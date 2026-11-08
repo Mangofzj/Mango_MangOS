@@ -1,6 +1,7 @@
 #include <stdarg.h>
 
 #include "types.h"
+#include "riscv.h"
 #include "spinlock.h"
 #include "defs.h"
 

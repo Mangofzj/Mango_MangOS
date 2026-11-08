@@ -19,10 +19,18 @@ void *kalloc(void);
 void kfree(void *);
 void kinit(void);
 
+/* vm.c */
+void kvminit(void);
+void kvminithart(void);
+void kvmmap(pagetable_t, uint64, uint64, uint64, int);
+int mappages(pagetable_t, uint64, uint64, uint64, int);
+pte_t *walk(pagetable_t, uint64, int);
+
 /* proc.c */
 int cpuid(void);
 struct cpu *mycpu(void);
 struct proc *myproc(void);
+void proc_mapstacks(pagetable_t);
 void procinit(void);
 void userinit(void);
 void scheduler(void) __attribute__((noreturn));

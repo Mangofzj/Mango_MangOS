@@ -1,5 +1,6 @@
 #include "types.h"
 #include "param.h"
+#include "memlayout.h"
 #include "riscv.h"
 #include "spinlock.h"
 #include "proc.h"
@@ -11,9 +12,28 @@ int nextpid = 1;  /* 下一个待分配的进程 ID */
 struct spinlock pid_lock;  /* 保护 nextpid 的自旋锁 */
 
 /**
- * @brief 初始化进程表：初始化锁、分配内核栈，并将进程状态置为 UNUSED。
+ * @brief 为每个进程分配一页内核栈并映射到内核页表。
  *
+ * @param kpgtbl 内核页表根指针
  * @note 内核栈分配失败时 panic。
+ */
+void
+proc_mapstacks(pagetable_t kpgtbl)
+{
+    struct proc *p;
+
+    for (p = proc; p < &proc[NPROC]; p++) {
+        char *pa = kalloc();
+        if (pa == 0)
+            panic("kalloc");
+
+        uint64 va = KSTACK((int)(p - proc));
+        kvmmap(kpgtbl, va, (uint64)pa, PGSIZE, PTE_R | PTE_W);
+    }
+}
+
+/**
+ * @brief 初始化进程表：初始化锁，设置内核栈地址，并将进程状态置为 UNUSED。
  */
 void
 procinit(void)
@@ -25,9 +45,7 @@ procinit(void)
     for (p = proc; p < &proc[NPROC]; p++) {
         initlock(&p->lock, "proc");
         p->state = UNUSED;
-        p->kstack = (uint64)kalloc();
-        if (p->kstack == 0)
-            panic("procinit: kalloc");
+        p->kstack = KSTACK((int)(p - proc));
     }
 }
 
