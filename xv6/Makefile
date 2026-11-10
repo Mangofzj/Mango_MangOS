@@ -18,7 +18,8 @@ OBJS = \
 	$K/plic.o \
 	$K/spinlock.o \
 	$K/console.o \
-	$K/vm.o
+	$K/vm.o \
+	$K/trampoline.o
 
 TOOLPREFIX = riscv64-unknown-elf-
 

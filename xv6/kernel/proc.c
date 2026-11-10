@@ -8,8 +8,14 @@
 
 struct cpu cpus[NCPU];  /* CPU 状态数组 */
 struct proc proc[NPROC];  /* 进程表 */
+struct proc *initproc;  /* 初始进程指针 */
+
 int nextpid = 1;  /* 下一个待分配的进程 ID */
 struct spinlock pid_lock;  /* 保护 nextpid 的自旋锁 */
+
+extern void forkret(void);
+
+extern char trampoline[];  /* 跳板页代码起始地址 */
 
 /**
  * @brief 为每个进程分配一页内核栈并映射到内核页表。
@@ -30,8 +36,8 @@ proc_mapstacks(pagetable_t kpgtbl)
         uint64 va = KSTACK((int)(p - proc));
         kvmmap(kpgtbl, va, (uint64)pa, PGSIZE, PTE_R | PTE_W);
 
-    if (p == proc)
-        printf("stack: va [%p] --> pa [%p]\n", (void *)va, pa);        
+        if (p == proc)
+            printf("stack: va [%p] --> pa [%p]\n", (void *)va, pa);
     }
 }
 
@@ -114,15 +120,79 @@ allocpid()
 }
 
 /**
- * @brief 分配一个空闲进程，并初始化其上下文和任务入口。
+ * @brief 解除跳板页与陷阱帧映射，并释放进程页表及用户内存。
  *
- * 找到空闲进程后保持其锁处于持有状态，由调用方继续设置状态并释放。
+ * @param pagetable 进程页表根指针
+ * @param sz 用户内存大小（字节）
+ */
+void
+proc_freepagetable(pagetable_t pagetable, uint64 sz)
+{
+    uvmunmap(pagetable, TRAMPOLINE, 1, 0);
+    uvmunmap(pagetable, TRAPFRAME, 1, 0);
+    uvmfree(pagetable, sz);
+}
+
+/**
+ * @brief 释放陷阱帧和进程页表，并将进程控制块重置为未使用状态。
  *
- * @param start_routin 任务入口函数
- * @return 分配到的进程；无空闲进程时返回 0
+ * @param p 待释放的进程
+ */
+static void
+freeproc(struct proc *p)
+{
+    if (p->trapframe)
+        kfree((void *)p->trapframe);
+    p->trapframe = 0;
+
+    if (p->pagetable)
+        proc_freepagetable(p->pagetable, p->sz);
+
+    p->pagetable = 0;
+    p->sz = 0;
+    p->pid = 0;
+    p->name[0] = 0;
+    p->state = UNUSED;
+}
+
+/**
+ * @brief 创建进程的用户页表，并映射跳板页与陷阱帧。
+ *
+ * @return 页表根指针；创建或映射失败时返回 0
+ */
+pagetable_t
+proc_pagetable(struct proc *p)
+{
+    pagetable_t pagetable;
+
+    pagetable = uvmcreate();
+    if (pagetable == 0)
+        return 0;
+
+    if (mappages(pagetable, TRAMPOLINE, PGSIZE, (uint64)trampoline, PTE_R | PTE_X) < 0) {
+        uvmfree(pagetable, 0);
+        return 0;
+    }
+
+    if (mappages(pagetable, TRAPFRAME, PGSIZE, (uint64)(p->trapframe), PTE_R | PTE_W) < 0) {
+        uvmunmap(pagetable, TRAMPOLINE, 1, 0);
+        uvmfree(pagetable, 0);
+        return 0;
+    }
+
+    return pagetable;
+}
+
+/**
+ * @brief 分配一个空闲进程，并初始化其陷阱帧、页表与上下文。
+ *
+ * 找到空闲进程后保持其锁处于持有状态，由调用方继续设置状态并释放；
+ * 陷阱帧或页表分配失败时调用 freeproc 释放资源并返回 0。
+ *
+ * @return 分配到的进程；无空闲进程、陷阱帧分配失败或页表创建失败时返回 0
  */
 static struct proc *
-allocproc(void (*start_routin)(void))
+allocproc(void)
 {
     struct proc *p;
 
@@ -141,40 +211,81 @@ found:
     p->pid = allocpid();
     p->state = USED;
 
+    if ((p->trapframe = (struct trapframe *)kalloc()) == 0) {
+        freeproc(p);
+        release(&p->lock);
+        return 0;
+    }
+
+    p->pagetable = proc_pagetable(p);
+    if (p->pagetable == 0) {
+        freeproc(p);
+        release(&p->lock);
+        return 0;
+    }
+
     memset(&p->context, 0, sizeof(p->context));
-    p->context.ra = (uint64)kerneltrapret;
+    p->context.ra = (uint64)forkret;
     p->context.sp = p->kstack + PGSIZE;
-    p->start = start_routin;
 
     return p;
 }
 
+/* 初始进程的机器码：跳转到自身 */
+uchar initcode[] = {
+    0x01, 0xa0,
+};
+int sizeof_initcode = sizeof(initcode);
+
 /**
- * @brief 创建初始任务：task0、task1 与 shell，并将它们置为可运行。
+ * @brief 将初始进程的机器码加载到用户虚拟地址 0。
+ *
+ * 分配一页并映射到地址 0，复制机器码后设置进程名、epc 与 sp。
+ *
+ * @param src 机器码起始地址
+ * @param sz 机器码长度（字节）
+ * @note 机器码超过一页、内存分配或映射失败时 panic。
+ * @return 固定返回 0
+ */
+static int
+loadinit(uchar *src, uint sz)
+{
+    char *mem;
+    struct proc *p = myproc();
+    pagetable_t pagetable = p->pagetable;
+
+    if (sz > PGSIZE)
+        panic("loadinit: more than a page");
+
+    mem = kalloc();
+    if (mem == 0)
+        panic("kalloc");
+    memset(mem, 0, PGSIZE);
+
+    if (mappages(pagetable, 0, PGSIZE, (uint64)mem, PTE_W | PTE_R | PTE_X | PTE_U) < 0)
+        panic("loadinit: mappages failed");
+
+    memmove(mem, src, sz);
+    p->sz = PGSIZE;
+
+    safestrcpy(p->name, "init", sizeof(p->name));
+
+    p->trapframe->epc = 0;
+    p->trapframe->sp = PGSIZE;
+
+    return 0;
+}
+
+/**
+ * @brief 创建初始进程并置为可运行。
  */
 void
 userinit(void)
 {
     struct proc *p;
 
-    p = allocproc(user_task0);
-    if (p == 0)
-        panic("userinit: allocproc task0 failed");
-    safestrcpy(p->name, "task0", 6);
-    p->state = RUNNABLE;
-    release(&p->lock);
-
-    p = allocproc(user_task1);
-    if (p == 0)
-        panic("userinit: allocproc task1 failed");
-    safestrcpy(p->name, "task1", 6);
-    p->state = RUNNABLE;
-    release(&p->lock);
-
-    p = allocproc(user_shell);
-    if (p == 0)
-        panic("userinit: allocproc shell failed");
-    safestrcpy(p->name, "shell", 6);
+    p = allocproc();
+    initproc = p;
     p->state = RUNNABLE;
     release(&p->lock);
 }
@@ -246,25 +357,36 @@ yield(void)
 }
 
 /**
- * @brief 新进程的首次入口：释放进程锁并跳转到任务入口。
+ * @brief 新进程首次被调度时的入口。
  *
- * 设置 sstatus 的 SPP、SPIE 与 sepc 后执行 sret，进入 p->start 指向的任务函数。
+ * 释放进程锁；第一次进入时加载 initcode 并设置陷阱帧，
+ * 随后准备返回用户模式并跳转到 trampoline 中的 userret。
  */
 void
-kerneltrapret(void)
+forkret(void)
 {
+    extern char userret[];
+    static int first = 1;
     struct proc *p = myproc();
 
     release(&p->lock);
 
-    uint64 x = r_sstatus();
-    x |= SSTATUS_SPP;
-    x |= SSTATUS_SPIE;
-    w_sstatus(x);
+    if (first) {
+        first = 0;
 
-    w_sepc((uint64)p->start);
+        /* 首次进入时同步内存并加载初始进程的机器码 */
+        __sync_synchronize();
+        p->trapframe->a0 = loadinit(initcode, sizeof_initcode);
+        if (p->trapframe->a0 == -1) {
+            panic("loadinit");
+        }
+    }
 
-    asm volatile("sret");
+    prepare_return();
+    uint64 satp = MAKE_SATP(p->pagetable);
+    uint64 trampoline_userret = TRAMPOLINE + (userret - trampoline);
+
+    ((void (*)(uint64))trampoline_userret)(satp);
 }
 
 /**

@@ -21,18 +21,10 @@ main(void)
 
         kinit();
         kvminit();
-
-        *(int *)KERNBASE = 100;
-        printf("BEFORE turning on paging!\n");
-
         kvminithart();
         procinit();
         trapinit();
         trapinithart();
-
-        *(int *)KERNBASE = 100;
-        printf("AFTER turning on paging!\n");
-
         plicinit();
         plicinithart();
         userinit();

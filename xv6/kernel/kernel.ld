@@ -19,6 +19,11 @@ SECTIONS
         kernel/entry.o(.text)
         *(.text .text.*)
         . = ALIGN(0x1000);
+        /* 将跳板页段放入 .text，并断言大小正好一页 */
+        _trampoline = .;
+        *(trampsec)
+        . = ALIGN(0x1000);
+        ASSERT(. - _trampoline == 0x1000, "error: trampoline larger than one page");
         PROVIDE(etext = .);
     }
 

@@ -11,6 +11,7 @@ void panic(char *) __attribute__((noreturn));
 
 /* string.c */
 void *memset(void *, int, uint);
+void *memmove(void *dst, const void *src, uint n);
 char *safestrcpy(char *, const char *, int);
 int strlen(const char *);
 
@@ -25,6 +26,9 @@ void kvminithart(void);
 void kvmmap(pagetable_t, uint64, uint64, uint64, int);
 int mappages(pagetable_t, uint64, uint64, uint64, int);
 pte_t *walk(pagetable_t, uint64, int);
+pagetable_t uvmcreate(void);
+void uvmfree(pagetable_t, uint64);
+void uvmunmap(pagetable_t, uint64, uint64, int);
 
 /* proc.c */
 int cpuid(void);
@@ -36,8 +40,9 @@ void userinit(void);
 void scheduler(void) __attribute__((noreturn));
 void sched(void);
 void yield(void);
-void kerneltrapret(void);
 void procdump(void);
+pagetable_t proc_pagetable(struct proc *);
+void proc_freepagetable(pagetable_t, uint64);
 
 /* swtch.S */
 void swtch(struct context *, struct context *);
@@ -46,6 +51,7 @@ void swtch(struct context *, struct context *);
 void trapinit(void);
 void trapinithart(void);
 int devintr(void);
+void prepare_return(void);
 
 /* uart.c */
 void uartinit(void);

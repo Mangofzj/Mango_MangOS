@@ -14,6 +14,7 @@
 #define PLIC_SPRIORITY(hart) (PLIC + 0x201000 + (hart) * 0x2000)  /* S 模式优先级阈值 */
 #define PLIC_SCLAIM(hart)    (PLIC + 0x201004 + (hart) * 0x2000)  /* 中断认领与完成寄存器 */
 
-/* 跳板页与内核栈地址 */
-#define TRAMPOLINE (MAXVA - PGSIZE)  /* 跳板页虚拟地址 */
 #define KSTACK(p) (TRAMPOLINE - ((p) + 1) * 2 * PGSIZE)  /* 第 p 个进程的内核栈地址，每个进程间隔 2 页 */
+
+#define TRAMPOLINE (MAXVA - PGSIZE)  /* 跳板页虚拟地址 */
+#define TRAPFRAME  (TRAMPOLINE - PGSIZE)  /* 陷阱帧虚拟地址 */
