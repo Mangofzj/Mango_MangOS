@@ -26,9 +26,11 @@ void kvminithart(void);
 void kvmmap(pagetable_t, uint64, uint64, uint64, int);
 int mappages(pagetable_t, uint64, uint64, uint64, int);
 pte_t *walk(pagetable_t, uint64, int);
+uint64 walkaddr(pagetable_t, uint64);
 pagetable_t uvmcreate(void);
 void uvmfree(pagetable_t, uint64);
 void uvmunmap(pagetable_t, uint64, uint64, int);
+int copyin(pagetable_t, char *, uint64, uint64);
 
 /* proc.c */
 int cpuid(void);
@@ -40,6 +42,7 @@ void userinit(void);
 void scheduler(void) __attribute__((noreturn));
 void sched(void);
 void yield(void);
+int either_copyin(void *dst, int user_src, uint64 src, uint64 len);
 void procdump(void);
 pagetable_t proc_pagetable(struct proc *);
 void proc_freepagetable(pagetable_t, uint64);
@@ -52,6 +55,11 @@ void trapinit(void);
 void trapinithart(void);
 int devintr(void);
 void prepare_return(void);
+
+/* syscall.c */
+void argint(int, int *);
+void argaddr(int, uint64 *);
+void syscall(void);
 
 /* uart.c */
 void uartinit(void);
@@ -81,7 +89,7 @@ void consoleinit(void);
 void consoleintr(int);
 void consputc(int);
 int consoleread(uint64 dst, int n);
-int consolewrite(uint64 src, int n);
+int consolewrite(int user_src, uint64 src, int n);
 
 /* user.c */
 void user_task0(void);

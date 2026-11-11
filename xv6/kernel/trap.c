@@ -45,7 +45,9 @@ usertrap(void)
     p->trapframe->epc = r_sepc();
 
     if (r_scause() == 8) {
-        panic("usertrap: syscall not implemented yet");
+        p->trapframe->epc += 4;
+        intr_on();
+        syscall();
     } else if ((which_dev = devintr()) != 0) {
     } else {
         printf("usertrap(): unexpected scause 0x%lx pid=%d\n", r_scause(), p->pid);

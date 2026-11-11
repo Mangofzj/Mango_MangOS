@@ -386,6 +386,18 @@ forkret(void)
     ((void (*)(uint64))trampoline_userret)(satp);
 }
 
+int
+either_copyin(void *dst, int user_src, uint64 src, uint64 len)
+{
+    struct proc *p = myproc();
+    if (user_src) {
+        return copyin(p->pagetable, dst, src, len);
+    } else {
+        memmove(dst, (char *)src, len);
+        return 0;
+    }
+}
+
 /**
  * @brief 打印进程表：列出每个已使用进程的 ID、状态与名称。
  */

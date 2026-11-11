@@ -108,6 +108,27 @@ walk(pagetable_t pagetable, uint64 va, int alloc)
     return &pagetable[PX(0, va)];
 }
 
+uint64
+walkaddr(pagetable_t pagetable, uint64 va)
+{
+    pte_t *pte;
+    uint64 pa;
+
+    if (va >= MAXVA)
+        return 0;
+
+    pte = walk(pagetable, va, 0);
+    if (pte == 0)
+        return 0;
+    if ((*pte & PTE_V) == 0)
+        return 0;
+    if ((*pte & PTE_U) == 0)
+        return 0;
+
+    pa = PTE2PA(*pte);
+    return pa;
+}
+
 /**
  * @brief 递归释放页表结构占用的页。
  *
@@ -256,4 +277,26 @@ uvmfree(pagetable_t pagetable, uint64 sz)
         uvmunmap(pagetable, 0, PGROUNDUP(sz) / PGSIZE, 1);
 
     freewalk(pagetable);
+}
+
+int
+copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len)
+{
+    uint64 n, va0, pa0;
+
+    while (len > 0) {
+        va0 = PGROUNDDOWN(srcva);
+        pa0 = walkaddr(pagetable, va0);
+        if (pa0 == 0)
+            return -1;
+        n = PGSIZE - (srcva - va0);
+        if (n > len)
+            n = len;
+        memmove(dst, (void *)(pa0 + (srcva - va0)), n);
+
+        len -= n;
+        dst += n;
+        srcva = va0 + PGSIZE;
+    }
+    return 0;
 }
