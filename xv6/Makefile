@@ -1,5 +1,6 @@
 
 K=kernel
+U=user
 
 OBJS = \
 	$K/entry.o \
@@ -10,7 +11,6 @@ OBJS = \
 	$K/string.o \
 	$K/proc.o \
 	$K/swtch.o \
-	$K/user.o \
 	$K/trap.o \
 	$K/uart.o \
 	$K/timer.o \
@@ -19,7 +19,8 @@ OBJS = \
 	$K/spinlock.o \
 	$K/console.o \
 	$K/vm.o \
-	$K/trampoline.o
+	$K/trampoline.o \
+	$K/initcode.o
 
 TOOLPREFIX = riscv64-unknown-elf-
 
@@ -43,7 +44,7 @@ CFLAGS += -fno-pie
 
 LDFLAGS = -z max-page-size=4096
 
-$K/kernel: $(OBJS) $K/kernel.ld
+$K/kernel: $(OBJS) $K/kernel.ld $K/initcode.c
 	$(LD) $(LDFLAGS) -T $K/kernel.ld -o $K/kernel $(OBJS)
 	$(OBJDUMP) -S $K/kernel > $K/kernel.asm
 	$(OBJDUMP) -t $K/kernel | sed '1,/SYMBOL TABLE/d; s/ .* / /; /^$$/d' > $K/kernel.sym
@@ -54,9 +55,22 @@ $K/kernel.bin: $K/kernel
 $K/%.o: $K/%.S
 	$(CC) -march=rv64gc -g -c -o $@ $<
 
--include kernel/*.d
+$K/initcode.c: $U/initcode
+	$U/gen_ccode.sh $U/initcode $K/initcode.c
+
+$U/start.o: $U/start.S
+	$(CC) $(CFLAGS) -c -o $U/start.o $U/start.S
+
+$U/initcode: $U/start.o $U/init.o
+	$(LD) $(LDFLAGS) -N -e _start -Ttext 0 -o $U/initcode.out $U/start.o $U/init.o
+	$(OBJCOPY) -S -O binary $U/initcode.out $U/initcode
+	$(OBJDUMP) -S $U/initcode.out > $U/initcode.asm
+
+-include kernel/*.d user/*.d
 
 .PHONY: clean
 clean:
 	rm -f $K/*.o $K/*.d $K/*.asm $K/*.sym \
-	      $K/kernel $K/kernel.bin
+	      $K/kernel $K/kernel.bin $K/initcode.c \
+	      $U/*.o $U/*.d $U/*.asm \
+	      $U/initcode $U/initcode.out

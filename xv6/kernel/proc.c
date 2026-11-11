@@ -231,11 +231,8 @@ found:
     return p;
 }
 
-/* 初始进程的机器码：跳转到自身 */
-uchar initcode[] = {
-    0x01, 0xa0,
-};
-int sizeof_initcode = sizeof(initcode);
+extern uchar initcode[];
+extern int sizeof_initcode;
 
 /**
  * @brief 将初始进程的机器码加载到用户虚拟地址 0。
