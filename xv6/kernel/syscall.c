@@ -42,10 +42,12 @@ argaddr(int n, uint64 *ip)
     *ip = argraw(n);
 }
 
+extern uint64 sys_getpid(void);
 extern uint64 sys_write(void);
 
 static uint64 (*syscalls[])(void) = {
-    [SYS_write] sys_write,
+    [SYS_getpid] sys_getpid,
+    [SYS_write]  sys_write,
 };
 
 void

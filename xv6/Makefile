@@ -12,6 +12,7 @@ OBJS = \
 	$K/proc.o \
 	$K/swtch.o \
 	$K/trap.o \
+	$K/sysproc.o \
 	$K/sysfile.o \
 	$K/syscall.o \
 	$K/uart.o \
@@ -68,6 +69,9 @@ $U/initcode: $U/start.o $U/init.o $U/usys.o $U/printf.o
 	$(OBJCOPY) -S -O binary $U/initcode.out $U/initcode
 	$(OBJDUMP) -S $U/initcode.out > $U/initcode.asm
 
+$U/usys.S: $U/usys.pl
+	perl $U/usys.pl > $U/usys.S
+
 $U/usys.o: $U/usys.S
 	$(CC) $(CFLAGS) -c -o $U/usys.o $U/usys.S
 
@@ -78,4 +82,4 @@ clean:
 	rm -f $K/*.o $K/*.d $K/*.asm $K/*.sym \
 	      $K/kernel $K/kernel.bin $K/initcode.c \
 	      $U/*.o $U/*.d $U/*.asm \
-	      $U/initcode $U/initcode.out
+	      $U/initcode $U/initcode.out $U/usys.S

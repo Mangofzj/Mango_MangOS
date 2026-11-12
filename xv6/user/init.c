@@ -3,7 +3,9 @@
 int
 main(void)
 {
-    printf("Hello, World!\n");
+    int pid = getpid();
+
+    printf("Hello, World! My pid is %d\n", pid);
 
     return 0;
 }
