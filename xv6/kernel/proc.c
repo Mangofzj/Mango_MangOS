@@ -35,9 +35,6 @@ proc_mapstacks(pagetable_t kpgtbl)
 
         uint64 va = KSTACK((int)(p - proc));
         kvmmap(kpgtbl, va, (uint64)pa, PGSIZE, PTE_R | PTE_W);
-
-        if (p == proc)
-            printf("stack: va [%p] --> pa [%p]\n", (void *)va, pa);
     }
 }
 
