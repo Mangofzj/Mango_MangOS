@@ -149,6 +149,7 @@ freeproc(struct proc *p)
     p->sz = 0;
     p->pid = 0;
     p->name[0] = 0;
+    p->chan = 0;
     p->state = UNUSED;
 }
 
@@ -297,15 +298,27 @@ scheduler(void)
 
     c->proc = 0;
     for (;;) {
+        intr_on();
+        intr_off();
+
+        int found = 0;
+
         for (p = proc; p < &proc[NPROC]; p++) {
             acquire(&p->lock);
+
             if (p->state == RUNNABLE) {
                 p->state = RUNNING;
                 c->proc = p;
                 swtch(&c->context, &p->context);
                 c->proc = 0;
+                found = 1;
             }
+
             release(&p->lock);
+        }
+
+        if (found == 0) {
+            asm volatile("wfi");
         }
     }
 }
@@ -383,10 +396,46 @@ forkret(void)
     ((void (*)(uint64))trampoline_userret)(satp);
 }
 
+void
+sleep(void *chan, struct spinlock *lk)
+{
+    struct proc *p = myproc();
+
+    acquire(&p->lock);
+    release(lk);
+
+    p->chan = chan;
+    p->state = SLEEPING;
+    sched();
+    p->chan = 0;
+
+    release(&p->lock);
+    acquire(lk);
+}
+
+void
+wakeup(void *chan)
+{
+    struct proc *p;
+
+    for (p = proc; p < &proc[NPROC]; p++) {
+        if (p != myproc()) {
+            acquire(&p->lock);
+
+            if (p->state == SLEEPING && p->chan == chan) {
+                p->state = RUNNABLE;
+            }
+
+            release(&p->lock);
+        }
+    }
+}
+
 int
 either_copyin(void *dst, int user_src, uint64 src, uint64 len)
 {
     struct proc *p = myproc();
+
     if (user_src) {
         return copyin(p->pagetable, dst, src, len);
     } else {

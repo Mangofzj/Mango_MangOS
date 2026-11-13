@@ -42,6 +42,8 @@ void userinit(void);
 void scheduler(void) __attribute__((noreturn));
 void sched(void);
 void yield(void);
+void sleep(void *, struct spinlock *);
+void wakeup(void *);
 int either_copyin(void *dst, int user_src, uint64 src, uint64 len);
 void procdump(void);
 pagetable_t proc_pagetable(struct proc *);
@@ -51,6 +53,8 @@ void proc_freepagetable(pagetable_t, uint64);
 void swtch(struct context *, struct context *);
 
 /* trap.c */
+extern uint ticks;
+extern struct spinlock tickslock;
 void trapinit(void);
 void trapinithart(void);
 int devintr(void);

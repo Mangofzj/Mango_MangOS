@@ -77,6 +77,7 @@ struct proc {
     struct spinlock lock;  /* 进程锁 */
 
     enum procstate state;  /* 进程状态 */
+    void *chan;  /* 睡眠等待通道 */
     int pid;  /* 进程 ID */
 
     uint64 kstack;  /* 内核栈虚拟地址 */

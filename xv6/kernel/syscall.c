@@ -43,10 +43,14 @@ argaddr(int n, uint64 *ip)
 }
 
 extern uint64 sys_getpid(void);
+extern uint64 sys_pause(void);
+extern uint64 sys_uptime(void);
 extern uint64 sys_write(void);
 
 static uint64 (*syscalls[])(void) = {
     [SYS_getpid] sys_getpid,
+    [SYS_pause]  sys_pause,
+    [SYS_uptime] sys_uptime,
     [SYS_write]  sys_write,
 };
 

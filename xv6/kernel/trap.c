@@ -8,11 +8,15 @@
 
 extern char trampoline[], uservec[];  /* 跳板页代码与 uservec 入口地址 */
 
+struct spinlock tickslock;
+uint ticks;
+
 void kernelvec(void);
 
 void
 trapinit(void)
 {
+    initlock(&tickslock, "time");
 }
 
 void
