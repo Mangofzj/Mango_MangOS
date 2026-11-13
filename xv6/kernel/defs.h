@@ -67,6 +67,8 @@ void syscall(void);
 
 /* uart.c */
 void uartinit(void);
+void uartputc_sync(int);
+void uartwrite(char *, int);
 int uartgetc(void);
 void uartintr(void);
 

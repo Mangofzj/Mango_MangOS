@@ -19,7 +19,7 @@ struct {
 } cons;
 
 /**
- * @brief 初始化控制台：初始化输入缓冲锁并使能 UART 接收中断。
+ * @brief 初始化控制台：初始化输入缓冲锁，并使能 UART 接收与发送中断。
  */
 void
 consoleinit(void)
@@ -30,7 +30,7 @@ consoleinit(void)
 }
 
 /**
- * @brief 经 SBI 控制台输出一个字符。
+ * @brief 经 UART 同步输出一个字符。
  *
  * BACKSPACE 输出为 "\b \b"，用空格覆盖原字符后回退光标。
  *
@@ -40,67 +40,43 @@ void
 consputc(int c)
 {
     if (c == BACKSPACE) {
-        sbi_console_putchar('\b');
-        sbi_console_putchar(' ');
-        sbi_console_putchar('\b');
+        uartputc_sync('\b');
+        uartputc_sync(' ');
+        uartputc_sync('\b');
     } else {
-        sbi_console_putchar(c);
+        uartputc_sync(c);
     }
 }
 
 /**
- * @brief 处理控制台输入字符：更新输入缓冲、回显并处理行编辑。
+ * @brief 向控制台写入数据。
  *
- * Ctrl-P 打印进程信息，Ctrl-U 删除当前行，Ctrl-H 或 DEL 删除一个字符；
- * 其他字符写入缓冲并回显，遇到换行、Ctrl-D 或缓冲写满时提交给 consoleread。
+ * 分块经 either_copyin 拷入内核缓冲区，再交给 uartwrite 发送；
+ * 拷贝失败时提前结束。
  *
- * @param c 接收到的字符
+ * @param user_src 非 0 时 src 为用户地址
+ * @param src 数据源地址
+ * @param n 写入字节数
+ * @return 实际写入的字节数
  */
-void
-consoleintr(int c)
+int
+consolewrite(int user_src, uint64 src, int n)
 {
-    acquire(&cons.lock);
+    char buf[32];
+    int i = 0;
 
-    switch (c) {
-    case C('P'):
-        /* Ctrl-P：打印进程信息 */
-        procdump();
-        break;
+    while (i < n) {
+        int nn = sizeof(buf);
 
-    case C('U'):
-        /* Ctrl-U：删除当前行已输入的内容 */
-        while (cons.e != cons.w && cons.buf[(cons.e - 1) % INPUT_BUF_SIZE] != '\n') {
-            cons.e--;
-            consputc(BACKSPACE);
-        }
-        break;
-
-    case C('H'):
-    case '\x7f':
-        /* Ctrl-H 或 DEL：退格删除一个字符 */
-        if (cons.e != cons.w) {
-            cons.e--;
-            consputc(BACKSPACE);
-        }
-        break;
-
-    default:
-        /* 缓冲未满时写入字符并回显 */
-        if (c != 0 && cons.e - cons.r < INPUT_BUF_SIZE) {
-            c = (c == '\r') ? '\n' : c;  /* 回车统一为换行 */
-            consputc(c);
-
-            cons.buf[cons.e++ % INPUT_BUF_SIZE] = c;
-
-            /* 换行、Ctrl-D 或缓冲写满时提交数据 */
-            if (c == '\n' || c == C('D') || cons.e - cons.r == INPUT_BUF_SIZE) {
-                cons.w = cons.e;
-            }
-        }
-        break;
+        if (nn > n - i)
+            nn = n - i;
+        if (either_copyin(buf, user_src, src + i, nn) == -1)
+            break;
+        uartwrite(buf, nn);
+        i += nn;
     }
 
-    release(&cons.lock);
+    return i;
 }
 
 /**
@@ -156,26 +132,57 @@ consoleread(uint64 dst, int n)
     return target - n;
 }
 
-int
-consolewrite(int user_src, uint64 src, int n)
+/**
+ * @brief 处理控制台输入字符：更新输入缓冲、回显并处理行编辑。
+ *
+ * Ctrl-P 打印进程信息，Ctrl-U 删除当前行，Ctrl-H 或 DEL 删除一个字符；
+ * 其他字符写入缓冲并回显，遇到换行、Ctrl-D 或缓冲写满时提交给 consoleread。
+ *
+ * @param c 接收到的字符
+ */
+void
+consoleintr(int c)
 {
-    char buf[32];
-    int i = 0;
+    acquire(&cons.lock);
 
-    while (i < n) {
-        int nn = sizeof(buf);
+    switch (c) {
+    case C('P'):
+        /* Ctrl-P：打印进程信息 */
+        procdump();
+        break;
 
-        if (nn > n - i)
-            nn = n - i;
+    case C('U'):
+        /* Ctrl-U：删除当前行已输入的内容 */
+        while (cons.e != cons.w && cons.buf[(cons.e - 1) % INPUT_BUF_SIZE] != '\n') {
+            cons.e--;
+            consputc(BACKSPACE);
+        }
+        break;
 
-        if (either_copyin(buf, user_src, src + i, nn) == -1)
-            break;
+    case C('H'):
+    case '\x7f':
+        /* Ctrl-H 或 DEL：退格删除一个字符 */
+        if (cons.e != cons.w) {
+            cons.e--;
+            consputc(BACKSPACE);
+        }
+        break;
 
-        for (int j = 0; j < nn; j++)
-            consputc(buf[j]);
+    default:
+        /* 缓冲未满时写入字符并回显 */
+        if (c != 0 && cons.e - cons.r < INPUT_BUF_SIZE) {
+            c = (c == '\r') ? '\n' : c;  /* 回车统一为换行 */
+            consputc(c);
 
-        i += nn;
+            cons.buf[cons.e++ % INPUT_BUF_SIZE] = c;
+
+            /* 换行、Ctrl-D 或缓冲写满时提交数据 */
+            if (c == '\n' || c == C('D') || cons.e - cons.r == INPUT_BUF_SIZE) {
+                cons.w = cons.e;
+            }
+        }
+        break;
     }
 
-    return i;
+    release(&cons.lock);
 }
