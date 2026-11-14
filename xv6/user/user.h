@@ -1,3 +1,4 @@
+int read(int, void *, int);
 int getpid(void);
 int pause(int);
 int uptime(void);

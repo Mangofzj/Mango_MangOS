@@ -300,3 +300,32 @@ copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len)
     }
     return 0;
 }
+
+int
+copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
+{
+    uint64 n, va0, pa0;
+    pte_t *pte;
+
+    while (len > 0) {
+        va0 = PGROUNDDOWN(dstva);
+        if (va0 >= MAXVA)
+            return -1;
+        pa0 = walkaddr(pagetable, va0);
+        if (pa0 == 0)
+            return -1;
+        pte = walk(pagetable, va0, 0);
+        if ((*pte & PTE_W) == 0)
+            return -1;
+        n = PGSIZE - (dstva - va0);
+        if (n > len)
+            n = len;
+        memmove((void *)(pa0 + (dstva - va0)), src, n);
+
+        len -= n;
+        src += n;
+        dstva = va0 + PGSIZE;
+    }
+
+    return 0;
+}

@@ -31,6 +31,7 @@ pagetable_t uvmcreate(void);
 void uvmfree(pagetable_t, uint64);
 void uvmunmap(pagetable_t, uint64, uint64, int);
 int copyin(pagetable_t, char *, uint64, uint64);
+int copyout(pagetable_t, uint64, char *, uint64);
 
 /* proc.c */
 int cpuid(void);
@@ -45,6 +46,7 @@ void yield(void);
 void sleep(void *, struct spinlock *);
 void wakeup(void *);
 int either_copyin(void *dst, int user_src, uint64 src, uint64 len);
+int either_copyout(int user_dst, uint64 dst, void *src, uint64 len);
 void procdump(void);
 pagetable_t proc_pagetable(struct proc *);
 void proc_freepagetable(pagetable_t, uint64);
@@ -94,7 +96,7 @@ void release(struct spinlock *);
 void consoleinit(void);
 void consoleintr(int);
 void consputc(int);
-int consoleread(uint64 dst, int n);
+int consoleread(int user_dst, uint64 dst, int n);
 int consolewrite(int user_src, uint64 src, int n);
 
 /* user.c */

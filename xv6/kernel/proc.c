@@ -444,6 +444,19 @@ either_copyin(void *dst, int user_src, uint64 src, uint64 len)
     }
 }
 
+int
+either_copyout(int user_dst, uint64 dst, void *src, uint64 len)
+{
+    struct proc *p = myproc();
+
+    if (user_dst) {
+        return copyout(p->pagetable, dst, src, len);
+    } else {
+        memmove((char *)dst, src, len);
+        return 0;
+    }
+}
+
 /**
  * @brief 打印进程表：列出每个已使用进程的 ID、状态与名称。
  */

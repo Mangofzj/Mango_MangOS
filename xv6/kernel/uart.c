@@ -33,6 +33,7 @@
 
 static struct spinlock tx_lock;  /* 保护发送状态的自旋锁 */
 static int tx_busy;  /* 发送忙标志，由发送中断清除 */
+static int tx_chan;
 
 extern volatile int panicking;  /* panic 打印期间跳过中断关闭 */
 extern volatile int panicked;  /* panic 消息已输出完成 */
@@ -63,13 +64,9 @@ uartwrite(char buf[], int n)
 
     int i = 0;
     while (i < n) {
-        release(&tx_lock);
-
         while (tx_busy != 0) {
-            asm volatile("" : : : "memory");
+            sleep(&tx_chan, &tx_lock);
         }
-
-        acquire(&tx_lock);
 
         if (buf[i] == '\n') {
             while ((ReadReg(LSR) & LSR_TX_IDLE) == 0)
@@ -149,6 +146,7 @@ uartintr(void)
 
     if (ReadReg(LSR) & LSR_TX_IDLE) {
         tx_busy = 0;
+        wakeup(&tx_chan);
     }
 
     release(&tx_lock);

@@ -82,15 +82,16 @@ consolewrite(int user_src, uint64 src, int n)
 /**
  * @brief 从控制台输入缓冲读取数据。
  *
- * 缓冲为空时忙等，直到有数据可读；读取到换行符或 Ctrl-D 时结束。
+ * 缓冲为空时睡眠等待，直到有数据可读；读取到换行符或 Ctrl-D 时结束。
  * 已读取部分数据时，Ctrl-D 会留在缓冲中供下次读取。
  *
+ * @param user_dst 非 0 时 dst 为用户地址
  * @param dst 目标缓冲区地址
  * @param n 期望读取的最大字节数
  * @return 实际读取的字节数，最多为 n
  */
 int
-consoleread(uint64 dst, int n)
+consoleread(int user_dst, uint64 dst, int n)
 {
     uint target;
     int c;
@@ -99,13 +100,9 @@ consoleread(uint64 dst, int n)
     target = n;
     acquire(&cons.lock);
     while (n > 0) {
-        /* 等待期间释放锁，允许其他执行流写入缓冲 */
-        release(&cons.lock);
         while (cons.r == cons.w) {
-            /* 编译器屏障，确保每轮重新读取 cons.r 和 cons.w */
-            asm volatile ("" : : : "memory");
+            sleep(&cons.r, &cons.lock);
         }
-        acquire(&cons.lock);
 
         c = cons.buf[cons.r++ % INPUT_BUF_SIZE];
 
@@ -118,8 +115,8 @@ consoleread(uint64 dst, int n)
         }
 
         cbuf = c;
-        *((char *)dst) = cbuf;
-
+        if (either_copyout(user_dst, dst, &cbuf, 1) == -1)
+            break;
         dst++;
         n--;
 
@@ -179,6 +176,7 @@ consoleintr(int c)
             /* 换行、Ctrl-D 或缓冲写满时提交数据 */
             if (c == '\n' || c == C('D') || cons.e - cons.r == INPUT_BUF_SIZE) {
                 cons.w = cons.e;
+                wakeup(&cons.r);
             }
         }
         break;
