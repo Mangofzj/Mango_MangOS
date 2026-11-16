@@ -6,6 +6,17 @@
 #include "defs.h"
 
 uint64
+sys_exit(void)
+{
+    int n;
+
+    argint(0, &n);
+    kexit(n);
+
+    return 0;
+}
+
+uint64
 sys_getpid(void)
 {
     return myproc()->pid;

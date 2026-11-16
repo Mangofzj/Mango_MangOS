@@ -4,7 +4,12 @@
 void
 runcmd(char *cmd)
 {
-    printf("Running command: '%s', unsupported!\n", cmd);
+    if (strcmp(cmd, "exit") == 0) {
+        printf("Exiting shell...\n");
+        exit(0);
+    } else {
+        printf("Running command: '%s', unsupported!\n", cmd);
+    }
 }
 
 int
@@ -19,10 +24,16 @@ getcmd(char *buf, int nbuf)
     return 0;
 }
 
-void
-main(void)
+int
+main(int argc, char *argv[])
 {
     static char buf[100];
+    int i;
+
+    printf("init: argc = %d\n", argc);
+    for (i = 0; i < argc; i++) {
+        printf("init: argv[%d] is: %s\n", i, argv[i]);
+    }
 
     while (getcmd(buf, sizeof(buf)) >= 0) {
         char *cmd = buf;
@@ -34,4 +45,6 @@ main(void)
         cmd[strlen(cmd) - 1] = '\0';
         runcmd(cmd);
     }
+
+    return 0;
 }

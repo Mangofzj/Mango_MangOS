@@ -33,4 +33,6 @@ Thumbs.db
 /xv6/user/initcode
 /xv6/user/initcode.out
 /xv6/kernel/initcode.c
+/xv6/kernel/_*.c
 /xv6/user/usys.S
+/xv6/user/_*

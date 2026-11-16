@@ -7,6 +7,38 @@
 #include "syscall.h"
 #include "defs.h"
 
+int
+fetchaddr(uint64 addr, uint64 *ip)
+{
+    struct proc *p = myproc();
+    if (addr >= p->sz || addr+sizeof(uint64) > p->sz)
+        return -1;
+    if (copyin(p->pagetable, (char *)ip, addr, sizeof(*ip)) != 0)
+        return -1;
+
+    return 0;
+}
+
+int
+fetchstr(uint64 addr, char *buf, int max)
+{
+    struct proc *p = myproc();
+    if (copyinstr(p->pagetable, buf, addr, max) < 0)
+        return -1;
+
+    return strlen(buf);
+}
+
+int
+argstr(int n, char *buf, int max)
+{
+    uint64 addr;
+
+    argaddr(n, &addr);
+
+    return fetchstr(addr, buf, max);
+}
+
 /**
  * @brief 读取第 n 个系统调用参数。
  *
@@ -62,7 +94,9 @@ argaddr(int n, uint64 *ip)
     *ip = argraw(n);
 }
 
+extern uint64 sys_exit(void);
 extern uint64 sys_read(void);
+extern uint64 sys_exec(void);
 extern uint64 sys_getpid(void);
 extern uint64 sys_pause(void);
 extern uint64 sys_uptime(void);
@@ -70,7 +104,9 @@ extern uint64 sys_write(void);
 
 /* 系统调用分发表，按 SYS_* 编号索引 */
 static uint64 (*syscalls[])(void) = {
+    [SYS_exit]   sys_exit,
     [SYS_read]   sys_read,
+    [SYS_exec]   sys_exec,
     [SYS_getpid] sys_getpid,
     [SYS_pause]  sys_pause,
     [SYS_uptime] sys_uptime,

@@ -12,6 +12,7 @@ void panic(char *) __attribute__((noreturn));
 /* string.c */
 void *memset(void *, int, uint);
 void *memmove(void *dst, const void *src, uint n);
+int strncmp(const char *, const char *, uint);
 char *safestrcpy(char *, const char *, int);
 int strlen(const char *);
 
@@ -28,10 +29,14 @@ int mappages(pagetable_t, uint64, uint64, uint64, int);
 pte_t *walk(pagetable_t, uint64, int);
 uint64 walkaddr(pagetable_t, uint64);
 pagetable_t uvmcreate(void);
+uint64 uvmalloc(pagetable_t, uint64, uint64, int);
+uint64 uvmdealloc(pagetable_t, uint64, uint64);
 void uvmfree(pagetable_t, uint64);
 void uvmunmap(pagetable_t, uint64, uint64, int);
+void uvmclear(pagetable_t, uint64);
 int copyin(pagetable_t, char *, uint64, uint64);
 int copyout(pagetable_t, uint64, char *, uint64);
+int copyinstr(pagetable_t, char *, uint64, uint64);
 
 /* proc.c */
 int cpuid(void);
@@ -40,6 +45,7 @@ struct proc *myproc(void);
 void proc_mapstacks(pagetable_t);
 void procinit(void);
 void userinit(void);
+void kexit(int);
 void scheduler(void) __attribute__((noreturn));
 void sched(void);
 void yield(void);
@@ -63,6 +69,9 @@ int devintr(void);
 void prepare_return(void);
 
 /* syscall.c */
+int fetchaddr(uint64, uint64 *);
+int fetchstr(uint64, char *, int);
+int argstr(int, char *, int);
 void argint(int, int *);
 void argaddr(int, uint64 *);
 void syscall(void);
@@ -91,6 +100,9 @@ void initlock(struct spinlock *, char *);
 int holding(struct spinlock *);
 void acquire(struct spinlock *);
 void release(struct spinlock *);
+
+/* exec.c */
+int kexec(char *, char **);
 
 /* console.c */
 void consoleinit(void);

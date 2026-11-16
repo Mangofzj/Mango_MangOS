@@ -2,6 +2,25 @@
 #include "kernel/riscv.h"
 #include "user/user.h"
 
+void
+start(int argc, char **argv)
+{
+    int r;
+    extern int main(int argc, char **argv);
+
+    r = main(argc, argv);
+    exit(r);
+}
+
+int
+strcmp(const char *p, const char *q)
+{
+    while (*p && *p == *q)
+        p++, q++;
+
+    return (uchar)*p - (uchar)*q;
+}
+
 uint
 strlen(const char *s)
 {

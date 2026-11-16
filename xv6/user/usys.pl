@@ -11,7 +11,9 @@ sub entry {
     print " ret\n";
 }
 
+entry("exit");
 entry("read");
+entry("exec");
 entry("getpid");
 entry("pause");
 entry("uptime");

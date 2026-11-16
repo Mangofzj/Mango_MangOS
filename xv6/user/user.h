@@ -1,11 +1,14 @@
 /* system calls */
+int exit(int) __attribute__ ((noreturn));
 int read(int, void *, int);
+int exec(const char *, char **);
 int getpid(void);
 int pause(int);
 int uptime(void);
 int write(int, const void *, int);
 
 /* ulib.c */
+int strcmp(const char *, const char *);
 char *gets(char *, int max);
 uint strlen(const char *);
 void *memset(void *, int, uint);

@@ -108,6 +108,15 @@ walk(pagetable_t pagetable, uint64 va, int alloc)
     return &pagetable[PX(0, va)];
 }
 
+/**
+ * @brief 查找用户虚拟地址对应的物理地址。
+ *
+ * 仅返回有效且用户可访问的页；地址越界、未映射或非用户页时返回 0。
+ *
+ * @param pagetable 页表指针
+ * @param va 用户虚拟地址
+ * @return 对应的物理地址；无法访问时返回 0
+ */
 uint64
 walkaddr(pagetable_t pagetable, uint64 va)
 {
@@ -279,6 +288,102 @@ uvmfree(pagetable_t pagetable, uint64 sz)
     freewalk(pagetable);
 }
 
+/**
+ * @brief 为用户地址空间分配并映射 [oldsz, newsz) 的内存。
+ *
+ * 以页为单位分配物理页并清零，映射权限为可读、用户态可访问及 xperm 附加权限。
+ *
+ * @param pagetable 用户页表根指针
+ * @param oldsz 原有内存大小（字节）
+ * @param newsz 新的内存大小（字节）
+ * @param xperm 附加的页表项权限
+ * @note 物理页分配或映射失败时，释放本次已分配的页并返回 0。
+ * @return 成功返回 newsz；newsz 小于 oldsz 时返回 oldsz
+ */
+uint64
+uvmalloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz, int xperm)
+{
+    char *mem;
+    uint64 a;
+
+    if (newsz < oldsz)
+        return oldsz;
+    oldsz = PGROUNDUP(oldsz);
+
+    for (a = oldsz; a < newsz; a += PGSIZE) {
+        mem = kalloc();
+        if (mem == 0) {
+            uvmdealloc(pagetable, a, oldsz);
+            return 0;
+        }
+        memset(mem, 0, PGSIZE);
+        if (mappages(pagetable, a, PGSIZE, (uint64)mem, PTE_R | PTE_U | xperm) != 0) {
+            kfree(mem);
+            uvmdealloc(pagetable, a, oldsz);
+            return 0;
+        }
+    }
+
+    return newsz;
+}
+
+/**
+ * @brief 释放用户地址空间 [newsz, oldsz) 范围内的页。
+ *
+ * 按页边界解除映射并释放物理页；newsz 不小于 oldsz 时不处理。
+ *
+ * @param pagetable 用户页表根指针
+ * @param oldsz 原内存大小（字节）
+ * @param newsz 收缩后的内存大小（字节）
+ * @return 收缩后的大小 newsz；无需收缩时返回 oldsz
+ */
+uint64
+uvmdealloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz)
+{
+    if (newsz >= oldsz)
+        return oldsz;
+
+    if (PGROUNDUP(newsz) < PGROUNDUP(oldsz)) {
+        int npages = (PGROUNDUP(oldsz) - PGROUNDUP(newsz)) / PGSIZE;
+        uvmunmap(pagetable, PGROUNDUP(newsz), npages, 1);
+    }
+
+    return newsz;
+}
+
+/**
+ * @brief 清除虚拟地址所在页的用户态访问权限。
+ *
+ * 清除页表项的 PTE_U 位，使该页仅内核可访问。
+ *
+ * @param pagetable 用户页表根指针
+ * @param va 虚拟地址
+ * @note 页表项查找失败时 panic。
+ */
+void
+uvmclear(pagetable_t pagetable, uint64 va)
+{
+    pte_t *pte;
+
+    pte = walk(pagetable, va, 0);
+
+    if (pte == 0)
+        panic("uvmclear");
+
+    *pte &= ~PTE_U;
+}
+
+/**
+ * @brief 从用户地址空间复制数据到内核缓冲区。
+ *
+ * 按页查找物理地址并逐段复制；源地址不可访问时返回 -1。
+ *
+ * @param pagetable 用户页表根指针
+ * @param dst 内核目标缓冲区
+ * @param srcva 用户源地址
+ * @param len 复制字节数
+ * @return 成功返回 0；源地址不可访问时返回 -1
+ */
 int
 copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len)
 {
@@ -301,6 +406,17 @@ copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len)
     return 0;
 }
 
+/**
+ * @brief 从内核缓冲区复制数据到用户地址空间。
+ *
+ * 按页查找物理地址，并确认页可写后逐段复制；目标地址不可访问或不可写时返回 -1。
+ *
+ * @param pagetable 用户页表根指针
+ * @param dstva 用户目标地址
+ * @param src 内核源缓冲区
+ * @param len 复制字节数
+ * @return 成功返回 0；目标地址不可访问或不可写时返回 -1
+ */
 int
 copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 {
@@ -328,4 +444,43 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
     }
 
     return 0;
+}
+
+int
+copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
+{
+    uint64 n, va0, pa0;
+    int got_null = 0;
+
+    while (got_null == 0 && max > 0) {
+        va0 = PGROUNDDOWN(srcva);
+        pa0 = walkaddr(pagetable, va0);
+        if (pa0 == 0)
+            return -1;
+        n = PGSIZE - (srcva - va0);
+        if (n > max)
+            n = max;
+        char *p = (char *)(pa0 + (srcva - va0));
+
+        while (n > 0) {
+            if (*p == '\0') {
+                *dst = '\0';
+                got_null = 1;
+                break;
+            } else {
+                *dst = *p;
+            }
+
+            --n;
+            --max;
+            p++;
+            dst++;
+        }
+        srcva = va0 + PGSIZE;
+    }
+
+    if (got_null)
+        return 0;
+    else
+        return -1;
 }

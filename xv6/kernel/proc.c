@@ -150,6 +150,7 @@ freeproc(struct proc *p)
     p->pid = 0;
     p->name[0] = 0;
     p->chan = 0;
+    p->xstate = 0;
     p->state = UNUSED;
 }
 
@@ -229,48 +230,6 @@ found:
     return p;
 }
 
-extern uchar initcode[];
-extern int sizeof_initcode;
-
-/**
- * @brief 将初始进程的机器码加载到用户虚拟地址 0。
- *
- * 分配一页并映射到地址 0，复制机器码后设置进程名、epc 与 sp。
- *
- * @param src 机器码起始地址
- * @param sz 机器码长度（字节）
- * @note 机器码超过一页、内存分配或映射失败时 panic。
- * @return 固定返回 0
- */
-static int
-loadinit(uchar *src, uint sz)
-{
-    char *mem;
-    struct proc *p = myproc();
-    pagetable_t pagetable = p->pagetable;
-
-    if (sz > PGSIZE)
-        panic("loadinit: more than a page");
-
-    mem = kalloc();
-    if (mem == 0)
-        panic("kalloc");
-    memset(mem, 0, PGSIZE);
-
-    if (mappages(pagetable, 0, PGSIZE, (uint64)mem, PTE_W | PTE_R | PTE_X | PTE_U) < 0)
-        panic("loadinit: mappages failed");
-
-    memmove(mem, src, sz);
-    p->sz = PGSIZE;
-
-    safestrcpy(p->name, "init", sizeof(p->name));
-
-    p->trapframe->epc = 0;
-    p->trapframe->sp = PGSIZE;
-
-    return 0;
-}
-
 /**
  * @brief 创建初始进程并置为可运行。
  */
@@ -283,6 +242,19 @@ userinit(void)
     initproc = p;
     p->state = RUNNABLE;
     release(&p->lock);
+}
+
+void
+kexit(int status)
+{
+    struct proc *p = myproc();
+
+    acquire(&p->lock);
+
+    p->xstate = status;
+    p->state = ZOMBIE;
+    sched();
+    panic("zombie exit");
 }
 
 /**
@@ -366,7 +338,7 @@ yield(void)
 /**
  * @brief 新进程首次被调度时的入口。
  *
- * 释放进程锁；第一次进入时加载 initcode 并设置陷阱帧，
+ * 释放进程锁；第一次进入时加载 init 程序并设置陷阱帧，
  * 随后准备返回用户模式并跳转到 trampoline 中的 userret。
  */
 void
@@ -381,12 +353,11 @@ forkret(void)
     if (first) {
         first = 0;
 
-        /* 首次进入时同步内存并加载初始进程的机器码 */
+        /* 首次进入时同步内存并加载 init 程序 */
         __sync_synchronize();
-        p->trapframe->a0 = loadinit(initcode, sizeof_initcode);
-        if (p->trapframe->a0 == -1) {
-            panic("loadinit");
-        }
+        p->trapframe->a0 = kexec("init", (char *[]){ "init", 0 });
+        if (p->trapframe->a0 == -1)
+            panic("exec");
     }
 
     prepare_return();
