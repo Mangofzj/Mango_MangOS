@@ -11,8 +11,11 @@ sub entry {
     print " ret\n";
 }
 
+entry("fork");
 entry("exit");
+entry("wait");
 entry("read");
+entry("kill");
 entry("exec");
 entry("getpid");
 entry("pause");

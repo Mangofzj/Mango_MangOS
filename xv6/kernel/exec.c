@@ -10,6 +10,7 @@
 static int loadseg(pde_t *, uint64, uchar *, uint, uint);
 
 extern uchar program__init[];  /* init 程序镜像起始地址 */
+extern uchar program__sh[];
 
 /**
  * @brief 将 ELF 段标志转换为页表项权限。
@@ -56,8 +57,11 @@ kexec(char *path, char **argv)
 
     if (strncmp(path, "init", 5) == 0) {
         program = program__init;
-    } else
+    } else if (strncmp(path, "sh", 2) == 0) {
+        program = program__sh;
+    } else {
         goto bad;
+    }
 
     memmove(&elf, program, sizeof(elf));
     if (elf.magic != ELF_MAGIC)

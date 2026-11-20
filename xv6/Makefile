@@ -24,7 +24,8 @@ OBJS = \
 	$K/vm.o \
 	$K/trampoline.o \
 	$K/exec.o \
-	$K/_init.o
+	$K/_init.o \
+	$K/_sh.o
 
 TOOLPREFIX = riscv64-unknown-elf-
 
@@ -48,7 +49,7 @@ CFLAGS += -fno-pie
 
 LDFLAGS = -z max-page-size=4096
 
-$K/kernel: $U/_init $(OBJS) $K/kernel.ld
+$K/kernel: $U/_init $U/_sh $(OBJS) $K/kernel.ld
 	$(LD) $(LDFLAGS) -T $K/kernel.ld -o $K/kernel $(OBJS)
 	$(OBJDUMP) -S $K/kernel > $K/kernel.asm
 	$(OBJDUMP) -t $K/kernel | sed '1,/SYMBOL TABLE/d; s/ .* / /; /^$$/d' > $K/kernel.sym
@@ -71,6 +72,9 @@ _%: %.o $(ULIB) $U/user.ld
 $K/_init.o: $K/_init.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 
+$K/_sh.o: $K/_sh.c
+	$(CC) $(CFLAGS) -c -o $@ $<
+
 $U/usys.S: $U/usys.pl
 	perl $U/usys.pl > $U/usys.S
 
@@ -81,6 +85,7 @@ $U/usys.o: $U/usys.S
 
 UPROGS=\
 	$U/_init\
+	$U/_sh \
 
 -include kernel/*.d user/*.d
 

@@ -49,6 +49,9 @@ usertrap(void)
     p->trapframe->epc = r_sepc();
 
     if (r_scause() == 8) {
+        if (killed(p))
+            kexit(-1);
+
         p->trapframe->epc += 4;
         intr_on();
         syscall();
@@ -56,14 +59,16 @@ usertrap(void)
     } else {
         printf("usertrap(): unexpected scause 0x%lx pid=%d\n", r_scause(), p->pid);
         printf("            sepc=0x%lx stval=0x%lx\n", r_sepc(), r_stval());
-        panic("usertrap: should be killed but we have not support killing!");
+        setkilled(p);
     }
+
+    if (killed(p))
+        kexit(-1);
 
     if (which_dev == 2)
         yield();
 
     prepare_return();
-
     uint64 satp = MAKE_SATP(p->pagetable);
 
     return satp;

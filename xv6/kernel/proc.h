@@ -78,8 +78,10 @@ struct proc {
 
     enum procstate state;  /* 进程状态 */
     void *chan;  /* 睡眠等待通道 */
+    int killed;
     int xstate;  /* 进程退出状态 */
     int pid;  /* 进程 ID */
+    struct proc *parent;
 
     uint64 kstack;  /* 内核栈虚拟地址 */
     uint64 sz;  /* 进程内存大小 */

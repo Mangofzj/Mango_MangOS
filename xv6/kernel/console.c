@@ -101,6 +101,11 @@ consoleread(int user_dst, uint64 dst, int n)
     acquire(&cons.lock);
     while (n > 0) {
         while (cons.r == cons.w) {
+            if (killed(myproc())) {
+                release(&cons.lock);
+                return -1;
+            }
+
             sleep(&cons.r, &cons.lock);
         }
 

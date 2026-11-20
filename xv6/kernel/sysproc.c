@@ -23,6 +23,32 @@ sys_getpid(void)
 }
 
 uint64
+sys_fork(void)
+{
+    return kfork();
+}
+
+uint64
+sys_wait(void)
+{
+    uint64 p;
+
+    argaddr(0, &p);
+
+    return kwait(p);
+}
+
+uint64
+sys_kill(void)
+{
+    int pid;
+
+    argint(0, &pid);
+
+    return kkill(pid);
+}
+
+uint64
 sys_pause(void)
 {
     int n;
@@ -33,12 +59,15 @@ sys_pause(void)
         n = 0;
 
     acquire(&tickslock);
-
     ticks0 = ticks;
     while (ticks - ticks0 < n) {
+        if (killed(myproc())) {
+            release(&tickslock);
+            return -1;
+        }
+
         sleep(&ticks, &tickslock);
     }
-
     release(&tickslock);
 
     return 0;
@@ -50,9 +79,7 @@ sys_uptime(void)
     uint xticks;
 
     acquire(&tickslock);
-
     xticks = ticks;
-
     release(&tickslock);
 
     return xticks;

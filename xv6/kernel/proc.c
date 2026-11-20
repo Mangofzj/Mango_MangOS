@@ -12,6 +12,7 @@ struct proc *initproc;  /* 初始进程指针 */
 
 int nextpid = 1;  /* 下一个待分配的进程 ID */
 struct spinlock pid_lock;  /* 保护 nextpid 的自旋锁 */
+struct spinlock wait_lock;
 
 extern void forkret(void);
 
@@ -47,6 +48,7 @@ procinit(void)
     struct proc *p;
 
     initlock(&pid_lock, "nextpid");
+    initlock(&wait_lock, "wait_lock");
 
     for (p = proc; p < &proc[NPROC]; p++) {
         initlock(&p->lock, "proc");
@@ -148,8 +150,10 @@ freeproc(struct proc *p)
     p->pagetable = 0;
     p->sz = 0;
     p->pid = 0;
+    p->parent = 0;
     p->name[0] = 0;
     p->chan = 0;
+    p->killed = 0;
     p->xstate = 0;
     p->state = UNUSED;
 }
@@ -244,17 +248,106 @@ userinit(void)
     release(&p->lock);
 }
 
+int
+kfork(void)
+{
+    int pid;
+    struct proc *np;
+    struct proc *p = myproc();
+
+    if ((np = allocproc()) == 0) {
+        return -1;
+    }
+    if (uvmcopy(p->pagetable, np->pagetable, p->sz) < 0) {
+        freeproc(np);
+        release(&np->lock);
+        return -1;
+    }
+    np->sz = p->sz;
+    *(np->trapframe) = *(p->trapframe);
+    np->trapframe->a0 = 0;
+    safestrcpy(np->name, p->name, sizeof(p->name));
+    pid = np->pid;
+    release(&np->lock);
+    acquire(&wait_lock);
+    np->parent = p;
+    release(&wait_lock);
+    acquire(&np->lock);
+    np->state = RUNNABLE;
+    release(&np->lock);
+
+    return pid;
+}
+
+void
+reparent(struct proc *p)
+{
+    struct proc *pp;
+
+    for (pp = proc; pp < &proc[NPROC]; pp++) {
+        if (pp->parent == p) {
+            pp->parent = initproc;
+            wakeup(initproc);
+        }
+    }
+}
+
 void
 kexit(int status)
 {
     struct proc *p = myproc();
 
-    acquire(&p->lock);
+    if (p == initproc)
+        panic("init exiting");
 
+    acquire(&wait_lock);
+    reparent(p);
+    wakeup(p->parent);
+
+    acquire(&p->lock);
     p->xstate = status;
     p->state = ZOMBIE;
+    release(&wait_lock);
     sched();
     panic("zombie exit");
+}
+
+int
+kwait(uint64 addr)
+{
+    struct proc *pp;
+    int havekids, pid;
+    struct proc *p = myproc();
+
+    acquire(&wait_lock);
+    for (;;) {
+        havekids = 0;
+        for (pp = proc; pp < &proc[NPROC]; pp++) {
+            if (pp->parent == p) {
+                acquire(&pp->lock);
+                havekids = 1;
+                if (pp->state == ZOMBIE) {
+                    pid = pp->pid;
+                    if (addr != 0 && copyout(p->pagetable, addr, (char *)&pp->xstate, sizeof(pp->xstate)) < 0) {
+                        release(&pp->lock);
+                        release(&wait_lock);
+                        return -1;
+                    }
+                    freeproc(pp);
+                    release(&pp->lock);
+                    release(&wait_lock);
+
+                    return pid;
+                }  
+                release(&pp->lock);
+            }
+        }
+        if (!havekids || killed(p)) {
+            release(&wait_lock);
+            return -1;
+        }
+        sleep(p, &wait_lock);
+    }   
 }
 
 /**
@@ -400,6 +493,48 @@ wakeup(void *chan)
             release(&p->lock);
         }
     }
+}
+
+void
+setkilled(struct proc *p)
+{
+    acquire(&p->lock);
+    p->killed = 1;
+    release(&p->lock);
+}
+
+int
+killed(struct proc *p)
+{
+    int k;
+
+    acquire(&p->lock);
+    k = p->killed;
+    release(&p->lock);
+
+    return k;
+}
+
+int
+kkill(int pid)
+{
+    struct proc *p;
+
+    for (p = proc; p < &proc[NPROC]; p++) {
+        acquire(&p->lock);
+        if (p->pid == pid) {
+            p->killed = 1;
+            if (p->state == SLEEPING) {
+                p->state = RUNNABLE;
+            }
+            release(&p->lock);
+
+            return 0;
+        }
+        release(&p->lock);
+    }
+
+    return -1;
 }
 
 int

@@ -1,50 +1,37 @@
 #include "kernel/types.h"
 #include "user/user.h"
 
-void
-runcmd(char *cmd)
-{
-    if (strcmp(cmd, "exit") == 0) {
-        printf("Exiting shell...\n");
-        exit(0);
-    } else {
-        printf("Running command: '%s', unsupported!\n", cmd);
-    }
-}
+char *argv[] = { "sh", 0 };
 
 int
-getcmd(char *buf, int nbuf)
+main(void)
 {
-    write(2, "$ ", 2);
-    memset(buf, 0, nbuf);
-    gets(buf, nbuf);
-    if (buf[0] == 0)
-        return -1;
+    int pid, wpid;
 
-    return 0;
-}
+    for (;;) {
+        printf("init: starting sh\n");
+        pid = fork();
+        if (pid < 0) {
+            printf("init: fork failed\n");
+            exit(1);
+        }
+        if (pid == 0) {
+            exec("sh", argv);
+            printf("init: exec sh failed\n");
+            exit(1);
+        }
 
-int
-main(int argc, char *argv[])
-{
-    static char buf[100];
-    int i;
+        for (;;) {
+            wpid = wait((int *)0);
+            printf("init: wait returned successfully, process[%d] exited\n", wpid);
 
-    printf("init: argc = %d\n", argc);
-    for (i = 0; i < argc; i++) {
-        printf("init: argv[%d] is: %s\n", i, argv[i]);
+            if (wpid == pid) {
+                break;
+            } else if (wpid < 0) {
+                printf("init: wait returned an error\n");
+                exit(1);
+            } else {
+            }
+        }
     }
-
-    while (getcmd(buf, sizeof(buf)) >= 0) {
-        char *cmd = buf;
-
-        while (*cmd == ' ' || *cmd == '\t')
-            cmd++;
-        if (*cmd == '\n')
-            continue;
-        cmd[strlen(cmd) - 1] = '\0';
-        runcmd(cmd);
-    }
-
-    return 0;
 }
