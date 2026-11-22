@@ -30,8 +30,8 @@ trapinithart(void)
 /**
  * @brief 处理来自用户模式的陷阱。
  *
- * 保存用户 pc 后处理设备中断，计时器中断时调用 yield 让出 CPU。
- * 系统调用尚未实现，其余无法识别的陷阱直接 panic。
+ * 保存用户 pc 后分发系统调用、设备中断与缺页异常；计时器中断时让出 CPU。
+ * 无法识别的陷阱打印信息并标记进程终止，终止标志置位后调用 kexit 退出。
  *
  * @return 用户页表的 satp 值，供 userret 切换地址空间
  */
@@ -56,6 +56,8 @@ usertrap(void)
         intr_on();
         syscall();
     } else if ((which_dev = devintr()) != 0) {
+    } else if ((r_scause() == 15 || r_scause() == 13) && vmfault(p->pagetable, r_stval(), (r_scause() == 13) ? 1 : 0) != 0) {
+
     } else {
         printf("usertrap(): unexpected scause 0x%lx pid=%d\n", r_scause(), p->pid);
         printf("            sepc=0x%lx stval=0x%lx\n", r_sepc(), r_stval());

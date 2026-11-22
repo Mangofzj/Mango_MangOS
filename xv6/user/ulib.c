@@ -1,7 +1,17 @@
 #include "kernel/types.h"
 #include "kernel/riscv.h"
+#include "kernel/vm.h"
 #include "user/user.h"
 
+char *sbrk(int);
+char *sbrklazy(int);
+
+/**
+ * @brief 用户程序入口：调用 main 并以返回值退出。
+ *
+ * @param argc 参数个数
+ * @param argv 参数数组
+ */
 void
 start(int argc, char **argv)
 {
@@ -12,6 +22,13 @@ start(int argc, char **argv)
     exit(r);
 }
 
+/**
+ * @brief 比较两个字符串。
+ *
+ * @param p 第一个字符串
+ * @param q 第二个字符串
+ * @return 首个不同字符的字节差值；完全相同返回 0
+ */
 int
 strcmp(const char *p, const char *q)
 {
@@ -21,6 +38,12 @@ strcmp(const char *p, const char *q)
     return (uchar)*p - (uchar)*q;
 }
 
+/**
+ * @brief 计算字符串长度。
+ *
+ * @param s 字符串
+ * @return 长度，不含结尾 '\0'
+ */
 uint
 strlen(const char *s)
 {
@@ -32,6 +55,14 @@ strlen(const char *s)
     return n;
 }
 
+/**
+ * @brief 将一段内存填充为指定字节。
+ *
+ * @param dst 目标地址
+ * @param c 填充值
+ * @param n 填充字节数
+ * @return 目标地址 dst
+ */
 void *
 memset(void *dst, int c, uint n)
 {
@@ -44,6 +75,15 @@ memset(void *dst, int c, uint n)
     return dst;
 }
 
+/**
+ * @brief 从标准输入读取一行到缓冲区。
+ *
+ * 最多读取 max - 1 个字符，遇到换行、回车或读取失败时结束，并以 '\0' 结尾。
+ *
+ * @param buf 目标缓冲区
+ * @param max 缓冲区大小
+ * @return 目标缓冲区 buf
+ */
 char *
 gets(char *buf, int max)
 {
@@ -62,4 +102,28 @@ gets(char *buf, int max)
     buf[i] = '\0';
 
     return buf;
+}
+
+/**
+ * @brief 以立即分配方式调整当前进程的用户内存。
+ *
+ * @param n 增加或减少的字节数
+ * @return 调整前的内存大小；失败时返回 SBRK_ERROR
+ */
+char *
+sbrk(int n)
+{
+    return sys_sbrk(n, SBRK_EAGER);
+}
+
+/**
+ * @brief 以延迟分配方式调整当前进程的用户内存。
+ *
+ * @param n 增加或减少的字节数
+ * @return 调整前的内存大小；失败时返回 SBRK_ERROR
+ */
+char *
+sbrklazy(int n)
+{
+    return sys_sbrk(n, SBRK_LAZY);
 }

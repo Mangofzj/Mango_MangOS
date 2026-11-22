@@ -12,7 +12,7 @@ struct proc *initproc;  /* 初始进程指针 */
 
 int nextpid = 1;  /* 下一个待分配的进程 ID */
 struct spinlock pid_lock;  /* 保护 nextpid 的自旋锁 */
-struct spinlock wait_lock;
+struct spinlock wait_lock;  /* 保护父子关系与等待操作的自旋锁 */
 
 extern void forkret(void);
 
@@ -248,6 +248,44 @@ userinit(void)
     release(&p->lock);
 }
 
+/**
+ * @brief 调整当前进程的用户内存大小。
+ *
+ * n 大于 0 时扩展并分配新页，n 小于 0 时释放多余页。
+ *
+ * @param n 增加或减少的字节数
+ * @return 成功返回 0；超出用户地址空间上限或分配失败时返回 -1
+ */
+int
+growproc(int n)
+{
+    uint64 sz;
+    struct proc *p = myproc();
+
+    sz = p->sz;
+    if (n > 0) {
+        /* 用户内存不能延伸到陷阱帧 */
+        if (sz + n > TRAPFRAME) {
+            return -1;
+        }
+        if ((sz = uvmalloc(p->pagetable, sz, sz + n, PTE_W)) == 0) {
+            return -1;
+        }
+    } else if (n < 0) {
+        sz = uvmdealloc(p->pagetable, sz, sz + n);
+    }
+    p->sz = sz;
+
+    return 0;
+}
+
+/**
+ * @brief 创建当前进程的子进程。
+ *
+ * 分配新进程并复制父进程的用户内存与陷阱帧，子进程的 a0 置 0。
+ *
+ * @return 子进程的 ID；分配或内存复制失败时返回 -1
+ */
 int
 kfork(void)
 {
@@ -279,6 +317,13 @@ kfork(void)
     return pid;
 }
 
+/**
+ * @brief 将进程的子进程转交给 initproc。
+ *
+ * 同时唤醒 initproc，通知其有新的子进程需要处理。
+ *
+ * @param p 子进程的原父进程
+ */
 void
 reparent(struct proc *p)
 {
@@ -292,6 +337,14 @@ reparent(struct proc *p)
     }
 }
 
+/**
+ * @brief 结束当前进程并记录退出状态。
+ *
+ * 转交子进程、唤醒父进程，将自身置为 ZOMBIE 后切换出去。
+ *
+ * @param status 退出状态
+ * @note init 进程调用时 panic；正常路径不返回。
+ */
 void
 kexit(int status)
 {
@@ -312,6 +365,14 @@ kexit(int status)
     panic("zombie exit");
 }
 
+/**
+ * @brief 等待任一子进程退出，并回收其资源。
+ *
+ * addr 非 0 时将子进程的退出状态写入该用户地址。
+ *
+ * @param addr 退出状态的用户地址；为 0 时不写回
+ * @return 退出的子进程 ID；没有子进程、当前进程被标记终止或写回失败时返回 -1
+ */
 int
 kwait(uint64 addr)
 {
@@ -338,7 +399,7 @@ kwait(uint64 addr)
                     release(&wait_lock);
 
                     return pid;
-                }  
+                }
                 release(&pp->lock);
             }
         }
@@ -347,7 +408,7 @@ kwait(uint64 addr)
             return -1;
         }
         sleep(p, &wait_lock);
-    }   
+    }
 }
 
 /**
@@ -460,6 +521,14 @@ forkret(void)
     ((void (*)(uint64))trampoline_userret)(satp);
 }
 
+/**
+ * @brief 在 chan 上睡眠，直到被 wakeup 唤醒。
+ *
+ * 睡眠期间释放 lk，醒来后重新获取 lk。
+ *
+ * @param chan 等待通道
+ * @param lk 调用方持有并在睡眠期间释放的锁
+ */
 void
 sleep(void *chan, struct spinlock *lk)
 {
@@ -477,6 +546,11 @@ sleep(void *chan, struct spinlock *lk)
     acquire(lk);
 }
 
+/**
+ * @brief 唤醒所有在 chan 上睡眠的进程。
+ *
+ * @param chan 等待通道
+ */
 void
 wakeup(void *chan)
 {
@@ -495,6 +569,13 @@ wakeup(void *chan)
     }
 }
 
+/**
+ * @brief 将进程标记为待终止。
+ *
+ * 仅设置终止标志。
+ *
+ * @param p 目标进程
+ */
 void
 setkilled(struct proc *p)
 {
@@ -503,6 +584,12 @@ setkilled(struct proc *p)
     release(&p->lock);
 }
 
+/**
+ * @brief 查询进程是否已被标记终止。
+ *
+ * @param p 目标进程
+ * @return 已标记终止时返回非 0，否则返回 0
+ */
 int
 killed(struct proc *p)
 {
@@ -515,6 +602,14 @@ killed(struct proc *p)
     return k;
 }
 
+/**
+ * @brief 按 ID 终止指定进程。
+ *
+ * 设置终止标志；若目标正在睡眠，将其置为可运行以便检查标志。
+ *
+ * @param pid 目标进程的 ID
+ * @return 成功返回 0；未找到进程时返回 -1
+ */
 int
 kkill(int pid)
 {
@@ -537,6 +632,15 @@ kkill(int pid)
     return -1;
 }
 
+/**
+ * @brief 从用户地址或内核地址复制数据到内核缓冲区。
+ *
+ * @param dst 内核目标缓冲区
+ * @param user_src 非 0 时 src 为用户地址
+ * @param src 源地址
+ * @param len 复制字节数
+ * @return 成功返回 0；复制失败时返回 -1
+ */
 int
 either_copyin(void *dst, int user_src, uint64 src, uint64 len)
 {
@@ -550,6 +654,15 @@ either_copyin(void *dst, int user_src, uint64 src, uint64 len)
     }
 }
 
+/**
+ * @brief 从内核缓冲区复制数据到用户地址或内核地址。
+ *
+ * @param user_dst 非 0 时 dst 为用户地址
+ * @param dst 目标地址
+ * @param src 内核源缓冲区
+ * @param len 复制字节数
+ * @return 成功返回 0；复制失败时返回 -1
+ */
 int
 either_copyout(int user_dst, uint64 dst, void *src, uint64 len)
 {

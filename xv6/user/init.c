@@ -1,8 +1,13 @@
 #include "kernel/types.h"
 #include "user/user.h"
 
-char *argv[] = { "sh", 0 };
+char *argv[] = { "sh", 0 };  /* 启动 shell 的参数数组 */
 
+/**
+ * @brief 启动 shell，并在其退出后重新启动。
+ *
+ * 子进程 exec sh，父进程等待 shell 退出；wait 出错时退出。
+ */
 int
 main(void)
 {

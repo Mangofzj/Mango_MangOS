@@ -1,7 +1,10 @@
 #include "types.h"
+#include "param.h"
 #include "memlayout.h"
 #include "riscv.h"
 #include "defs.h"
+#include "spinlock.h"
+#include "proc.h"
 
 extern char etext[];  /* 内核代码段结束地址 */
 
@@ -216,7 +219,7 @@ mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
 /**
  * @brief 解除 [va, va + npages * PGSIZE) 范围的页映射。
  *
- * va 必须按页对齐；底层页表缺失、表项无效或非叶表项时 panic。
+ * va 必须按页对齐；底层页表或页表项不存在时跳过该页。
  *
  * @param pagetable 页表指针
  * @param va 起始虚拟地址
@@ -235,20 +238,14 @@ uvmunmap(pagetable_t pagetable, uint64 va,
 
     for (a = va; a < va + npages * PGSIZE; a += PGSIZE) {
         if ((pte = walk(pagetable, a, 0)) == 0)
-            panic("uvmunmap: walk");
-
+            continue;
         if ((*pte & PTE_V) == 0)
-            panic("uvmunmap: not mapped");
-
-        /* 只有有效位而没有权限位，说明是下一级页表 */
-        if (PTE_FLAGS(*pte) == PTE_V)
-            panic("uvmunmap: not a leaf");
+            continue;
 
         if (do_free) {
             uint64 pa = PTE2PA(*pte);
             kfree((void *)pa);
         }
-
         *pte = 0;
     }
 }
@@ -351,6 +348,17 @@ uvmdealloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz)
     return newsz;
 }
 
+/**
+ * @brief 将用户内存从旧页表复制到新页表。
+ *
+ * 逐页复制源页表中已映射的页，页表项权限沿用源页。
+ *
+ * @param old 源页表根指针
+ * @param new 目标页表根指针
+ * @param sz 复制的内存大小（字节）
+ * @note 源页表项缺失或无效时跳过该页；分配或映射失败时释放已复制的页并返回 -1。
+ * @return 成功返回 0；失败返回 -1
+ */
 int
 uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
 {
@@ -361,13 +369,12 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
 
     for (i = 0; i < sz; i += PGSIZE) {
         if ((pte = walk(old, i, 0)) == 0)
-            panic("uvmcopy: pte should exist");
+            continue;
         if ((*pte & PTE_V) == 0)
-            panic("uvmcopy: page not present");
+            continue;
 
         pa = PTE2PA(*pte);
         flags = PTE_FLAGS(*pte);
-
         if ((mem = kalloc()) == 0)
             goto err;
         memmove(mem, (char *)pa, PGSIZE);
@@ -380,6 +387,7 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
     return 0;
 
 err:
+    /* 释放本次已复制的页 */
     uvmunmap(new, 0, i / PGSIZE, 1);
     return -1;
 }
@@ -409,7 +417,7 @@ uvmclear(pagetable_t pagetable, uint64 va)
 /**
  * @brief 从用户地址空间复制数据到内核缓冲区。
  *
- * 按页查找物理地址并逐段复制；源地址不可访问时返回 -1。
+ * 按页查找物理地址，页未映射时通过 vmfault 分配，再逐段复制；仍不可访问时返回 -1。
  *
  * @param pagetable 用户页表根指针
  * @param dst 内核目标缓冲区
@@ -425,6 +433,10 @@ copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len)
     while (len > 0) {
         va0 = PGROUNDDOWN(srcva);
         pa0 = walkaddr(pagetable, va0);
+        if (pa0 == 0) {
+            if ((pa0 = vmfault(pagetable, va0, 0)) == 0)
+                return -1;
+        }
         if (pa0 == 0)
             return -1;
         n = PGSIZE - (srcva - va0);
@@ -442,7 +454,8 @@ copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len)
 /**
  * @brief 从内核缓冲区复制数据到用户地址空间。
  *
- * 按页查找物理地址，并确认页可写后逐段复制；目标地址不可访问或不可写时返回 -1。
+ * 按页查找物理地址，页未映射时通过 vmfault 分配，并确认页可写后逐段复制；
+ * 目标地址不可访问或不可写时返回 -1。
  *
  * @param pagetable 用户页表根指针
  * @param dstva 用户目标地址
@@ -461,6 +474,10 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
         if (va0 >= MAXVA)
             return -1;
         pa0 = walkaddr(pagetable, va0);
+        if (pa0 == 0) {
+            if ((pa0 = vmfault(pagetable, va0, 0)) == 0)
+                return -1;
+        }
         if (pa0 == 0)
             return -1;
         pte = walk(pagetable, va0, 0);
@@ -516,4 +533,58 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
         return 0;
     else
         return -1;
+}
+
+/**
+ * @brief 为缺页地址按需分配并映射一页物理内存。
+ *
+ * 地址超过进程大小或页已映射时不处理；否则分配一页、清零，
+ * 并以可读、可写、用户态可访问的权限映射。
+ *
+ * @param pagetable 用户页表指针
+ * @param va 触发缺页的虚拟地址
+ * @note read 参数当前未使用。
+ * @return 映射后的物理地址；不需要或无法分配时返回 0
+ */
+uint64
+vmfault(pagetable_t pagetable, uint64 va, int read)
+{
+    uint64 mem;
+    struct proc *p = myproc();
+
+    if (va >= p->sz)
+        return 0;
+    va = PGROUNDDOWN(va);
+    if (ismapped(pagetable, va)) {
+        return 0;
+    }
+    mem = (uint64) kalloc();
+    if (mem == 0)
+        return 0;
+    memset((void *) mem, 0, PGSIZE);
+    if (mappages(p->pagetable, va, PGSIZE, mem, PTE_W|PTE_U|PTE_R) != 0) {
+        kfree((void *)mem);
+        return 0;
+    }
+
+    return mem;
+}
+
+/**
+ * @brief 查询虚拟地址所在页是否已映射。
+ *
+ * @param pagetable 页表指针
+ * @param va 虚拟地址
+ * @return 已映射时返回 1，否则返回 0
+ */
+int
+ismapped(pagetable_t pagetable, uint64 va)
+{
+    pte_t *pte = walk(pagetable, va, 0);
+    if (pte == 0)
+        return 0;
+    if (*pte & PTE_V)
+        return 1;
+
+    return 0;
 }
