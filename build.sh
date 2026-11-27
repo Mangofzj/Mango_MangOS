@@ -164,7 +164,7 @@ dd if="$OUTPUT_DIR/fsbl/fsbl.bin" \
     bs=1K seek=0 \
     conv=notrunc \
     status=none
-# 将 DTB 写入固件镜像的 512 KiB 偏移处，位于 FSBL 固件区之后
+# 将 DTB 写入固件镜像的 512 KiB 偏移处
 dd if="$OUTPUT_DIR/dts/quard_star_sbi.dtb" \
     of="$OUTPUT_DIR/fw/fw.bin" \
     bs=1K seek=512 \
